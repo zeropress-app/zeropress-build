@@ -1,0 +1,35 @@
+{
+  "name": "@zeropress/build",
+  "version": "0.1.0",
+  "description": "ZeroPress full-build CLI",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "zeropress-build": "bin/zeropress-build.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zeropress-app/zeropress-build.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zeropress-app/zeropress-build/issues"
+  },
+  "homepage": "https://github.com/zeropress-app/zeropress-build#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@zeropress/build-core": "^0.1.1",
+    "@zeropress/preview-data-validator": "^0.2.0"
+  }
+}
