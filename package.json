@@ -29,7 +29,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@zeropress/build-core": "^0.1.1",
+    "@zeropress/build-core": "^0.1.2",
     "@zeropress/preview-data-validator": "^0.2.0"
   }
 }
