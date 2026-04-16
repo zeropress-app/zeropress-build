@@ -19,14 +19,15 @@
     "url": "https://github.com/zeropress-app/zeropress-build/issues"
   },
   "homepage": "https://github.com/zeropress-app/zeropress-build#readme",
-  "publishConfig": {
-    "access": "public"
+  "keywords": [
+    "zeropress",
+    "static-site-generator"
+  ],
+  "scripts": {
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18.18.0"
-  },
-  "scripts": {
-    "test": "node --test"
   },
   "dependencies": {
     "@zeropress/build-core": "^0.1.11",
