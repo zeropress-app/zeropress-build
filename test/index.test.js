@@ -30,7 +30,9 @@ async function captureLogs(fn) {
 test('run prints help with no args', async () => {
   const logs = await captureLogs(() => run([]));
   assert.equal(logs.some((line) => line.includes('Usage:')), true);
-  assert.equal(logs.some((line) => line.includes('zeropress-build <themeDir> <previewDataJson> [outDir]')), true);
+  assert.equal(logs.some((line) => line.includes('zeropress-build <themeDir> --data <path> [--out <dir>]')), true);
+  assert.equal(logs.some((line) => line.includes('Canonical preview-data v0.5 JSON file')), true);
+  assert.equal(logs.some((line) => line.includes('selective or patch build is not supported')), true);
 });
 
 test('run prints version', async () => {
@@ -39,23 +41,29 @@ test('run prints version', async () => {
   assert.deepEqual(logs, [pkg.version]);
 });
 
+test('run prints version with -v', async () => {
+  const logs = await captureLogs(() => run(['-v']));
+  const pkg = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+  assert.deepEqual(logs, [pkg.version]);
+});
+
 test('run rejects missing args', async () => {
   await assert.rejects(
     () => run([goldenThemeDir]),
-    /Invalid arguments: expected <themeDir> <previewDataJson> \[outDir\]/
+    /Invalid arguments: --data <path> is required/
   );
 });
 
 test('run rejects nonexistent theme directory', async () => {
   await assert.rejects(
-    () => run(['./does-not-exist-theme', defaultPreviewDataPath]),
+    () => run(['./does-not-exist-theme', '--data', defaultPreviewDataPath]),
     /Theme directory not found:/
   );
 });
 
 test('run rejects nonexistent preview-data file', async () => {
   await assert.rejects(
-    () => run([goldenThemeDir, './does-not-exist-preview.json']),
+    () => run([goldenThemeDir, '--data', './does-not-exist-preview.json']),
     /Preview-data file not found:/
   );
 });
@@ -67,7 +75,7 @@ test('run rejects invalid preview-data JSON', async () => {
   try {
     await fs.writeFile(invalidJsonPath, '{"broken":', 'utf8');
     await assert.rejects(
-      () => run([goldenThemeDir, invalidJsonPath]),
+      () => run([goldenThemeDir, '--data', invalidJsonPath]),
       /Invalid preview-data JSON:/
     );
   } finally {
@@ -82,7 +90,7 @@ test('run rejects preview-data that fails validation', async () => {
   try {
     await fs.writeFile(invalidPreviewPath, JSON.stringify({ version: '0.3' }), 'utf8');
     await assert.rejects(
-      () => run([goldenThemeDir, invalidPreviewPath]),
+      () => run([goldenThemeDir, '--data', invalidPreviewPath]),
       /Invalid preview-data:/
     );
   } finally {
@@ -96,7 +104,7 @@ test('run writes a full build to default ./dist when outDir is omitted', async (
 
   try {
     process.chdir(tempDir);
-    const logs = await captureLogs(() => run([goldenThemeDir, defaultPreviewDataPath]));
+    const logs = await captureLogs(() => run([goldenThemeDir, '--data', defaultPreviewDataPath]));
     const distDir = path.join(tempDir, 'dist');
 
     await fs.access(path.join(distDir, 'index.html'));
@@ -126,7 +134,7 @@ test('run writes a full build to an explicit outDir', async () => {
   const outDir = path.join(tempDir, 'site-output');
 
   try {
-    await run([goldenThemeDir, defaultPreviewDataPath, outDir]);
+    await run([goldenThemeDir, '--data', defaultPreviewDataPath, '--out', outDir]);
     await fs.access(path.join(outDir, 'index.html'));
     await fs.access(path.join(outDir, 'archive', 'index.html'));
     await fs.access(path.join(outDir, 'categories', 'general', 'index.html'));
@@ -145,7 +153,7 @@ test('run rejects a non-empty output directory', async () => {
     await fs.writeFile(path.join(outDir, 'existing.txt'), 'already here', 'utf8');
 
     await assert.rejects(
-      () => run([goldenThemeDir, defaultPreviewDataPath, outDir]),
+      () => run([goldenThemeDir, '--data', defaultPreviewDataPath, '--out', outDir]),
       /Output directory must be empty:/
     );
   } finally {

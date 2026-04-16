@@ -9,14 +9,12 @@ const require = createRequire(import.meta.url);
 const { version: PACKAGE_VERSION } = require('../package.json');
 
 export async function run(argv) {
-  const firstArg = argv[0];
-
-  if (!firstArg || firstArg === '--help' || firstArg === '-h') {
+  if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
     printHelp();
     return;
   }
 
-  if (firstArg === '--version' || firstArg === '-v') {
+  if (argv.includes('--version') || argv.includes('-v')) {
     console.log(PACKAGE_VERSION);
     return;
   }
@@ -42,42 +40,60 @@ function printHelp() {
   console.log(`zeropress-build - ZeroPress full-build CLI
 
 Usage:
-  zeropress-build <themeDir> <previewDataJson> [outDir]
+  zeropress-build <themeDir> --data <path> [--out <dir>]
 
 Arguments:
-  <themeDir>         Theme directory to render
-  <previewDataJson>  Canonical preview-data JSON file
-  [outDir]           Empty output directory (default: ./dist)
+  <themeDir>            Theme directory to render
 
 Options:
-  --help, -h         Show help
-  --version, -v      Show version
+  --data <path>         Canonical preview-data v0.5 JSON file
+  --out <dir>           Empty output directory (default: ./dist)
+  --help, -h            Show help
+  --version, -v         Show version
 
 Notes:
-  - v0 supports full build only
-  - selected-route input is not supported yet
+  - full build only
+  - selective or patch build is not supported
   - output defaults to ./dist relative to the current working directory
-  - output directory must not already contain files`);
+  - output directory must be empty`);
 }
 
 function parseArgs(argv) {
   const positional = [];
+  const flags = {};
 
-  for (const arg of argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === '--data' || arg === '--out') {
+      const value = argv[index + 1];
+      if (!value || value.startsWith('--')) {
+        throw new Error(`Invalid arguments: ${arg} requires a value`);
+      }
+      flags[arg.slice(2)] = value;
+      index += 1;
+      continue;
+    }
+
     if (arg.startsWith('--')) {
       throw new Error(`Invalid arguments: unknown option ${arg}`);
     }
+
     positional.push(arg);
   }
 
-  if (positional.length < 2 || positional.length > 3) {
-    throw new Error('Invalid arguments: expected <themeDir> <previewDataJson> [outDir]');
+  if (positional.length !== 1) {
+    throw new Error('Invalid arguments: expected <themeDir> --data <path> [--out <dir>]');
+  }
+
+  if (!flags.data) {
+    throw new Error('Invalid arguments: --data <path> is required');
   }
 
   const themeDir = path.resolve(process.cwd(), positional[0]);
-  const previewDataPath = path.resolve(process.cwd(), positional[1]);
-  const outDir = positional[2]
-    ? path.resolve(process.cwd(), positional[2])
+  const previewDataPath = path.resolve(process.cwd(), flags.data);
+  const outDir = flags.out
+    ? path.resolve(process.cwd(), flags.out)
     : path.resolve(process.cwd(), 'dist');
 
   return { themeDir, previewDataPath, outDir };
