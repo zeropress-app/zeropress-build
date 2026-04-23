@@ -30,7 +30,7 @@
     "node": ">=18.18.0"
   },
   "dependencies": {
-    "@zeropress/build-core": "^0.1.14",
-    "@zeropress/preview-data-validator": "^0.4.3"
+    "@zeropress/build-core": "^0.1.16",
+    "@zeropress/preview-data-validator": "^0.4.4"
   }
 }
