@@ -1,0 +1,131 @@
+{
+  "version": "0.5",
+  "generator": "zeropress-theme",
+  "generated_at": "2026-03-26T00:00:00Z",
+  "site": {
+    "title": "ZeroPress Preview",
+    "description": "Default preview data",
+    "url": "https://example.com",
+    "mediaBaseUrl": "",
+    "locale": "en-US",
+    "postsPerPage": 2,
+    "dateFormat": "YYYY-MM-DD",
+    "timeFormat": "HH:mm",
+    "timezone": "UTC",
+    "disallowComments": false
+  },
+  "content": {
+    "authors": [
+      {
+        "id": "author-1",
+        "display_name": "Admin"
+      }
+    ],
+    "posts": [
+      {
+        "id": "post-1",
+        "public_id": 101,
+        "title": "Hello ZeroPress",
+        "slug": "hello-zeropress",
+        "content": "<p>Preview post content</p>",
+        "document_type": "html",
+        "excerpt": "Preview excerpt",
+        "published_at_iso": "2026-02-14T09:00:00Z",
+        "updated_at_iso": "2026-02-14T09:00:00Z",
+        "author_id": "author-1",
+        "status": "published",
+        "allow_comments": true,
+        "category_slugs": [
+          "general"
+        ],
+        "tag_slugs": [
+          "intro"
+        ]
+      },
+      {
+        "id": "post-2",
+        "public_id": 102,
+        "title": "Theme Blocks Deep Dive",
+        "slug": "theme-blocks-deep-dive",
+        "content": "<p>Second preview post content</p>",
+        "document_type": "html",
+        "excerpt": "Second preview excerpt",
+        "published_at_iso": "2026-02-13T09:00:00Z",
+        "updated_at_iso": "2026-02-13T09:00:00Z",
+        "author_id": "author-1",
+        "status": "published",
+        "allow_comments": true,
+        "category_slugs": [
+          "general"
+        ],
+        "tag_slugs": [
+          "intro"
+        ]
+      },
+      {
+        "id": "post-3",
+        "public_id": 103,
+        "title": "Archive Patterns",
+        "slug": "archive-patterns",
+        "content": "<p>Third preview post content</p>",
+        "document_type": "html",
+        "excerpt": "Third preview excerpt",
+        "published_at_iso": "2026-02-12T09:00:00Z",
+        "updated_at_iso": "2026-02-12T09:00:00Z",
+        "author_id": "author-1",
+        "status": "published",
+        "allow_comments": true,
+        "category_slugs": [
+          "general"
+        ],
+        "tag_slugs": [
+          "intro"
+        ]
+      }
+    ],
+    "pages": [
+      {
+        "title": "About",
+        "slug": "about",
+        "content": "<p>About page</p>",
+        "document_type": "html",
+        "status": "published"
+      }
+    ],
+    "categories": [
+      {
+        "name": "General",
+        "slug": "general",
+        "description": "General posts"
+      }
+    ],
+    "tags": [
+      {
+        "name": "Intro",
+        "slug": "intro"
+      }
+    ]
+  },
+  "menus": {
+    "primary": {
+      "name": "Primary Menu",
+      "items": [
+        {
+          "title": "Home",
+          "url": "/",
+          "type": "custom",
+          "target": "_self",
+          "children": []
+        },
+        {
+          "title": "Archive",
+          "url": "/archive/",
+          "type": "custom",
+          "target": "_self",
+          "children": []
+        }
+      ]
+    }
+  },
+  "widgets": {}
+}

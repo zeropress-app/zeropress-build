@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { run } from '../src/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const buildCoreFixturesDir = path.join(__dirname, '..', '..', 'zeropress-build-core', 'test', 'fixtures');
-const goldenThemeDir = path.join(buildCoreFixturesDir, 'golden-theme');
-const defaultPreviewDataPath = path.join(buildCoreFixturesDir, 'default-preview-data.v0.3.json');
+const fixturesDir = path.join(__dirname, 'fixtures');
+const goldenThemeDir = path.join(fixturesDir, 'golden-theme');
+const defaultPreviewDataPath = path.join(fixturesDir, 'default-preview-data.json');
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
 
 async function captureLogs(fn) {

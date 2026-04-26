@@ -1,0 +1,16 @@
+<article class="post-page">
+  <h1>{{post.title}}</h1>
+  <p class="author">{{post.author.display_name}}</p>
+  <div class="content">{{post.html}}</div>
+  {{#if post.categories}}
+    <footer class="taxonomy taxonomy--categories">{{#for category in post.categories}}<a href="{{category.url}}" class="category-link">{{category.name}}</a>{{/for}}</footer>
+  {{/if}}
+  {{#if post.tags}}
+    <footer class="taxonomy taxonomy--tags">{{#for tag in post.tags}}<a href="{{tag.url}}" class="tag-link">{{tag.name}}</a>{{/for}}</footer>
+  {{/if}}
+  {{#if post.comments_enabled}}
+    <section class="comments-block">
+      <div class="comments-shell" data-zp-comments data-zp-comments-post="{{post.public_id}}" hidden></div>
+    </section>
+  {{/if}}
+</article>

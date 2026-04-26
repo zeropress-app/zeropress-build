@@ -76,7 +76,7 @@ zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
 ## Output
 
 - If `--out` is omitted, output is written to `./dist` relative to the current working directory
-- The output directory must be empty before the command runs
+- The output directory must not already contain files before the command runs
 - On success, the CLI prints generated file count, output directory, and elapsed time
 - Full-build output includes the normal artifact set such as `index.html`, post and page routes, hashed assets, `sitemap.xml`, `feed.xml`, `robots.txt`, and `meta.json`
 
