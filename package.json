@@ -1,6 +1,6 @@
 {
   "name": "@zeropress/build",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "ZeroPress full-build CLI",
   "type": "module",
   "license": "MIT",
@@ -30,7 +30,7 @@
     "node": ">=18.18.0"
   },
   "dependencies": {
-    "@zeropress/build-core": "^0.2.0",
-    "@zeropress/preview-data-validator": "^0.4.4"
+    "@zeropress/build-core": "^0.2.2",
+    "@zeropress/preview-data-validator": "^0.4.5"
   }
 }
