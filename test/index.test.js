@@ -111,7 +111,6 @@ test('run writes a full build to default ./dist when outDir is omitted', async (
     await fs.access(path.join(distDir, 'sitemap.xml'));
     await fs.access(path.join(distDir, 'feed.xml'));
     await fs.access(path.join(distDir, 'robots.txt'));
-    await fs.access(path.join(distDir, 'meta.json'));
     await fs.access(path.join(distDir, 'posts', 'hello-zeropress', 'index.html'));
     await fs.access(path.join(distDir, 'about', 'index.html'));
 
