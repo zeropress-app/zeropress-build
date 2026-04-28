@@ -185,6 +185,8 @@ export async function assertThemeDirectory(themeDir) {
 }
 
 export async function runBuild(themeDir, previewData, outDir) {
+  assertPublicPathDoesNotOverlap('Theme directory', themeDir);
+  assertPublicPathDoesNotOverlap('Output directory', outDir);
   await assertThemeDirectory(themeDir);
   await assertEmptyOutputDirectory(outDir);
   await copyPublicDirectory(resolvePublicDir(), outDir);
@@ -261,7 +263,7 @@ async function copyPublicEntries(sourceDir, targetDir) {
   const entries = await fs.readdir(sourceDir, { withFileTypes: true });
 
   for (const entry of entries) {
-    if (entry.isSymbolicLink()) {
+    if (shouldIgnorePublicEntry(entry.name) || entry.isSymbolicLink()) {
       continue;
     }
 
@@ -280,6 +282,39 @@ async function copyPublicEntries(sourceDir, targetDir) {
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.copyFile(sourcePath, targetPath);
   }
+}
+
+export function shouldIgnorePublicEntry(name) {
+  const basename = String(name || '');
+  const lowerName = basename.toLowerCase();
+  return (
+    basename.startsWith('.')
+    || lowerName === 'node_modules'
+    || lowerName === 'thumbs.db'
+    || lowerName.endsWith('.key')
+    || lowerName.endsWith('.pem')
+  );
+}
+
+export function assertPublicPathDoesNotOverlap(label, candidatePath, cwd = process.cwd()) {
+  const publicDir = resolvePublicDir(cwd);
+  const resolvedCandidate = path.resolve(cwd, candidatePath);
+  if (!pathsOverlap(publicDir, resolvedCandidate)) {
+    return;
+  }
+
+  throw new Error(`${label} must not overlap the cwd public directory: ${resolvedCandidate}`);
+}
+
+function pathsOverlap(firstPath, secondPath) {
+  const first = path.resolve(firstPath);
+  const second = path.resolve(secondPath);
+  return first === second || isPathInside(first, second) || isPathInside(second, first);
+}
+
+function isPathInside(parentPath, childPath) {
+  const relativePath = path.relative(parentPath, childPath);
+  return Boolean(relativePath) && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
 }
 
 async function ensureWritableParentPath(rootDir, relativePath) {

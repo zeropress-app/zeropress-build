@@ -156,6 +156,17 @@ test('run copies cwd public files before generated output', async () => {
     await fs.writeFile(path.join(tempDir, 'public', 'docs', 'foo.md'), '# Foo', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'index.html'), '<h1>Public index</h1>', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'about'), 'Public about file', 'utf8');
+    await fs.mkdir(path.join(tempDir, 'public', '.git'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'public', '.vscode'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'public', 'node_modules'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'public', '.env'), 'secret', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', '.DS_Store'), 'metadata', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', '.git', 'config'), 'git config', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', '.vscode', 'settings.json'), '{}', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'node_modules', 'x.js'), 'module', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'Thumbs.db'), 'thumbs', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'private.key'), 'key', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'cert.PEM'), 'pem', 'utf8');
 
     await run([goldenThemeDir, '--data', defaultPreviewDataPath]);
 
@@ -170,6 +181,47 @@ test('run copies cwd public files before generated output', async () => {
     assert.doesNotMatch(generatedIndex, /Public index/);
     assert.match(generatedAbout, /About/);
     assert.doesNotMatch(generatedAbout, /Public about file/);
+    await assert.rejects(() => fs.access(path.join(distDir, '.env')));
+    await assert.rejects(() => fs.access(path.join(distDir, '.DS_Store')));
+    await assert.rejects(() => fs.access(path.join(distDir, '.git', 'config')));
+    await assert.rejects(() => fs.access(path.join(distDir, '.vscode', 'settings.json')));
+    await assert.rejects(() => fs.access(path.join(distDir, 'node_modules', 'x.js')));
+    await assert.rejects(() => fs.access(path.join(distDir, 'Thumbs.db')));
+    await assert.rejects(() => fs.access(path.join(distDir, 'private.key')));
+    await assert.rejects(() => fs.access(path.join(distDir, 'cert.PEM')));
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run rejects theme and output paths that overlap cwd public', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'public', 'theme'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'theme'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'public', 'theme', 'theme.json'), '{}', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'theme', 'theme.json'), '{}', 'utf8');
+
+    await assert.rejects(
+      () => run(['public', '--data', defaultPreviewDataPath]),
+      /Theme directory must not overlap the cwd public directory:/,
+    );
+    await assert.rejects(
+      () => run(['public/theme', '--data', defaultPreviewDataPath]),
+      /Theme directory must not overlap the cwd public directory:/,
+    );
+    await assert.rejects(
+      () => run(['theme', '--data', defaultPreviewDataPath, '--out', 'public']),
+      /Output directory must not overlap the cwd public directory:/,
+    );
+    await assert.rejects(
+      () => run(['theme', '--data', defaultPreviewDataPath, '--out', 'public/dist']),
+      /Output directory must not overlap the cwd public directory:/,
+    );
   } finally {
     process.chdir(cwd);
     await fs.rm(tempDir, { recursive: true, force: true });

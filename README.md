@@ -78,7 +78,8 @@ zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
 - There is no `--public-dir` option; ZeroPress follows the common fixed `./public/` convention
 - Public files can be used for files such as `favicon.ico`, `ads.txt`, third-party assets, source files, images, and PDFs
 - If a public file and a generated ZeroPress file use the same output path, the generated file wins
-- Symlinks inside `public/` are ignored
+- Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside `public/` are ignored
+- The theme directory and output directory must not overlap with `./public/`
 
 ---
 
