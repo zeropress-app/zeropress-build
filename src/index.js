@@ -3,10 +3,11 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { performance } from 'node:perf_hooks';
 import { assertPreviewData } from '@zeropress/preview-data-validator';
-import { buildSiteFromThemeDir, FilesystemWriter } from '@zeropress/build-core';
+import { buildSiteFromThemeDir } from '@zeropress/build-core';
 
 const require = createRequire(import.meta.url);
 const { version: PACKAGE_VERSION } = require('../package.json');
+const PUBLIC_DIR_NAME = 'public';
 
 export async function run(argv) {
   if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
@@ -160,6 +161,10 @@ function mapBuildError(error) {
     return new Error(message);
   }
 
+  if (message.startsWith('Public path is not a directory:')) {
+    return new Error(message);
+  }
+
   return new Error(`Build failed: ${message}`);
 }
 
@@ -182,12 +187,33 @@ export async function assertThemeDirectory(themeDir) {
 export async function runBuild(themeDir, previewData, outDir) {
   await assertThemeDirectory(themeDir);
   await assertEmptyOutputDirectory(outDir);
-  const writer = new FilesystemWriter({ outDir });
+  await copyPublicDirectory(resolvePublicDir(), outDir);
+  const writer = new GeneratedOutputWriter({ outDir });
   return buildSiteFromThemeDir({
     previewData,
     themeDir,
     writer,
   });
+}
+
+class GeneratedOutputWriter {
+  constructor(options) {
+    if (!options?.outDir) {
+      throw new Error('GeneratedOutputWriter requires outDir');
+    }
+    this.outDir = options.outDir;
+  }
+
+  async write(file) {
+    const relativePath = normalizeOutputPath(file.path);
+    if (!relativePath) {
+      throw new Error('Invalid generated output path');
+    }
+    const fullPath = path.join(this.outDir, relativePath);
+    await ensureWritableParentPath(this.outDir, relativePath);
+    await fs.rm(fullPath, { recursive: true, force: true });
+    await fs.writeFile(fullPath, file.content);
+  }
 }
 
 export async function assertEmptyOutputDirectory(outDir) {
@@ -207,4 +233,82 @@ export async function assertEmptyOutputDirectory(outDir) {
     }
     throw error;
   }
+}
+
+export function resolvePublicDir(cwd = process.cwd()) {
+  return path.resolve(cwd, PUBLIC_DIR_NAME);
+}
+
+export async function copyPublicDirectory(publicDir, outDir) {
+  let rootStat;
+  try {
+    rootStat = await fs.lstat(publicDir);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return;
+    }
+    throw error;
+  }
+
+  if (!rootStat.isDirectory()) {
+    throw new Error(`Public path is not a directory: ${publicDir}`);
+  }
+
+  await copyPublicEntries(publicDir, outDir);
+}
+
+async function copyPublicEntries(sourceDir, targetDir) {
+  const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) {
+      continue;
+    }
+
+    const sourcePath = path.join(sourceDir, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
+
+    if (entry.isDirectory()) {
+      await copyPublicEntries(sourcePath, targetPath);
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.copyFile(sourcePath, targetPath);
+  }
+}
+
+async function ensureWritableParentPath(rootDir, relativePath) {
+  await fs.mkdir(rootDir, { recursive: true });
+
+  const segments = normalizeOutputPath(relativePath).split('/').filter(Boolean);
+  let currentPath = rootDir;
+
+  for (const segment of segments.slice(0, -1)) {
+    currentPath = path.join(currentPath, segment);
+
+    let stat;
+    try {
+      stat = await fs.lstat(currentPath);
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        await fs.mkdir(currentPath, { recursive: true });
+        continue;
+      }
+      throw error;
+    }
+
+    if (!stat.isDirectory()) {
+      await fs.rm(currentPath, { recursive: true, force: true });
+      await fs.mkdir(currentPath, { recursive: true });
+    }
+  }
+}
+
+function normalizeOutputPath(filePath) {
+  return String(filePath || '').replace(/^\/+/, '').replace(/\\/g, '/');
 }

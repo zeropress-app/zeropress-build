@@ -143,6 +143,57 @@ test('run writes a full build to an explicit outDir', async () => {
   }
 });
 
+test('run copies cwd public files before generated output', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'public', 'vendor'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'public', 'docs'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'public', 'favicon.ico'), 'icon', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'vendor', 'app.js'), 'console.log("public")', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'docs', 'foo.md'), '# Foo', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'index.html'), '<h1>Public index</h1>', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'about'), 'Public about file', 'utf8');
+
+    await run([goldenThemeDir, '--data', defaultPreviewDataPath]);
+
+    const distDir = path.join(tempDir, 'dist');
+    const generatedIndex = await fs.readFile(path.join(distDir, 'index.html'), 'utf8');
+    const generatedAbout = await fs.readFile(path.join(distDir, 'about', 'index.html'), 'utf8');
+
+    assert.equal(await fs.readFile(path.join(distDir, 'favicon.ico'), 'utf8'), 'icon');
+    assert.equal(await fs.readFile(path.join(distDir, 'vendor', 'app.js'), 'utf8'), 'console.log("public")');
+    assert.equal(await fs.readFile(path.join(distDir, 'docs', 'foo.md'), 'utf8'), '# Foo');
+    assert.match(generatedIndex, /ZeroPress Preview/);
+    assert.doesNotMatch(generatedIndex, /Public index/);
+    assert.match(generatedAbout, /About/);
+    assert.doesNotMatch(generatedAbout, /Public about file/);
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run rejects a cwd public path that is not a directory', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.writeFile(path.join(tempDir, 'public'), 'not a directory', 'utf8');
+
+    await assert.rejects(
+      () => run([goldenThemeDir, '--data', defaultPreviewDataPath]),
+      /Public path is not a directory:/,
+    );
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('run rejects a non-empty output directory', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
   const outDir = path.join(tempDir, 'site-output');
