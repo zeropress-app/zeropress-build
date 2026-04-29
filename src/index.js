@@ -2,7 +2,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { performance } from 'node:perf_hooks';
-import { assertPreviewData } from '@zeropress/preview-data-validator';
 import { buildSiteFromThemeDir } from '@zeropress/build-core';
 
 const require = createRequire(import.meta.url);
@@ -127,12 +126,6 @@ async function loadPreviewData(previewDataPath) {
     parsed = JSON.parse(raw);
   } catch (error) {
     throw new Error(`Invalid preview-data JSON: ${error.message}`);
-  }
-
-  try {
-    assertPreviewData(parsed);
-  } catch (error) {
-    throw new Error(`Invalid preview-data: ${error.message}`);
   }
 
   return parsed;

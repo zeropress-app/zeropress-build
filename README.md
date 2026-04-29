@@ -69,7 +69,7 @@ zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
 ### Preview Data
 
 - `--data <path>` must point to canonical preview-data v0.5 JSON
-- The payload is validated with [`@zeropress/preview-data-validator`](https://www.npmjs.com/package/@zeropress/preview-data-validator)
+- The payload is validated by [`@zeropress/build-core`](https://www.npmjs.com/package/@zeropress/build-core) against the canonical preview-data v0.5 contract
 - Optional `custom_html` is treated as trusted site-level HTML and may inject markup before `</head>` and `</body>`
 - Only provide `custom_html` from trusted admin/generator input; ZeroPress does not sanitize that HTML
 
@@ -120,7 +120,6 @@ zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
 ## Related
 
 - [@zeropress/build-core](https://www.npmjs.com/package/@zeropress/build-core)
-- [@zeropress/preview-data-validator](https://www.npmjs.com/package/@zeropress/preview-data-validator)
 - [@zeropress/theme](https://www.npmjs.com/package/@zeropress/theme)
 
 ---
