@@ -6,7 +6,8 @@ import { buildSiteFromThemeDir } from '@zeropress/build-core';
 
 const require = createRequire(import.meta.url);
 const { version: PACKAGE_VERSION } = require('../package.json');
-const PUBLIC_DIR_NAME = 'public';
+const DEFAULT_PUBLIC_DIR_NAME = 'public';
+const PUBLIC_DIR_ENV_NAME = 'ZEROPRESS_PUBLIC_DIR';
 
 export async function run(argv) {
   if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
@@ -231,7 +232,8 @@ export async function assertEmptyOutputDirectory(outDir) {
 }
 
 export function resolvePublicDir(cwd = process.cwd()) {
-  return path.resolve(cwd, PUBLIC_DIR_NAME);
+  const envValue = process.env[PUBLIC_DIR_ENV_NAME]?.trim();
+  return path.resolve(cwd, envValue || DEFAULT_PUBLIC_DIR_NAME);
 }
 
 export async function copyPublicDirectory(publicDir, outDir) {
@@ -296,7 +298,7 @@ export function assertPublicPathDoesNotOverlap(label, candidatePath, cwd = proce
     return;
   }
 
-  throw new Error(`${label} must not overlap the cwd public directory: ${resolvedCandidate}`);
+  throw new Error(`${label} must not overlap the public directory: ${resolvedCandidate}`);
 }
 
 function pathsOverlap(firstPath, secondPath) {

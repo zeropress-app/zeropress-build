@@ -75,13 +75,14 @@ zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
 
 ### Public Directory
 
-- If `./public/` exists in the current working directory, its files are copied to the output root before generated ZeroPress files are written
-- The `public/` directory name itself is not included in the output path
-- There is no `--public-dir` option; ZeroPress follows the common fixed `./public/` convention
+- If the resolved public directory exists, its files are copied to the output root before generated ZeroPress files are written
+- The public directory name itself is not included in the output path
+- There is no `--public-dir` option; set `ZEROPRESS_PUBLIC_DIR` when a project needs a different public root
+- `ZEROPRESS_PUBLIC_DIR` defaults to `./public/`; relative values are resolved from the current working directory
 - Public files can be used for files such as `favicon.ico`, `ads.txt`, third-party assets, source files, images, and PDFs
 - If a public file and a generated ZeroPress file use the same output path, the generated file wins
-- Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside `public/` are ignored
-- The theme directory and output directory must not overlap with `./public/`
+- Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside the public directory are ignored
+- The theme directory and output directory must not overlap with the resolved public directory
 
 ---
 
