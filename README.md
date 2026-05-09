@@ -81,6 +81,8 @@ zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
 - `ZEROPRESS_PUBLIC_DIR` defaults to `./public/`; relative values are resolved from the current working directory
 - Public files can be used for files such as `favicon.ico`, `ads.txt`, third-party assets, source files, images, and PDFs
 - If a public file and a generated ZeroPress file use the same output path, the generated file wins
+- `robots.txt` is the exception: a root-level public `robots.txt` is treated as the site owner's robots policy and prevents ZeroPress fallback `robots.txt` generation
+- When public `robots.txt` exists, ZeroPress copies it as-is and does not append a `Sitemap` directive. Add `Sitemap: https://example.com/sitemap.xml` manually when needed.
 - Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside the public directory are ignored
 - The theme directory and output directory must not overlap with the resolved public directory
 
@@ -92,7 +94,8 @@ zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
 - The output directory must not already contain files before the command runs
 - The output directory must be empty before public files are copied
 - On success, the CLI prints generated file count, output directory, and elapsed time
-- Full-build output includes the normal artifact set such as `index.html`, post and page routes, hashed assets, `sitemap.xml`, `feed.xml`, and `robots.txt`
+- Full-build output includes the normal artifact set such as `index.html`, post and page routes, hashed assets, `sitemap.xml`, `feed.xml`, and fallback `robots.txt`
+- If preview-data sets `site.indexing: false`, the generated fallback `robots.txt` disallows all agents. Custom crawler policies should be provided as public `robots.txt`.
 
 ---
 

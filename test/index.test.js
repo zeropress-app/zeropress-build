@@ -173,6 +173,7 @@ test('run copies cwd public files before generated output', async () => {
     await fs.writeFile(path.join(tempDir, 'public', 'favicon.ico'), 'icon', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'vendor', 'app.js'), 'console.log("public")', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'docs', 'foo.md'), '# Foo', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'robots.txt'), 'User-agent: *\nDisallow: /\n\nUser-agent: Cloudflare-AI-Search\nAllow: /\n', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'index.html'), '<h1>Public index</h1>', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'about'), 'Public about file', 'utf8');
     await fs.mkdir(path.join(tempDir, 'public', '.git'), { recursive: true });
@@ -196,6 +197,7 @@ test('run copies cwd public files before generated output', async () => {
     assert.equal(await fs.readFile(path.join(distDir, 'favicon.ico'), 'utf8'), 'icon');
     assert.equal(await fs.readFile(path.join(distDir, 'vendor', 'app.js'), 'utf8'), 'console.log("public")');
     assert.equal(await fs.readFile(path.join(distDir, 'docs', 'foo.md'), 'utf8'), '# Foo');
+    assert.equal(await fs.readFile(path.join(distDir, 'robots.txt'), 'utf8'), 'User-agent: *\nDisallow: /\n\nUser-agent: Cloudflare-AI-Search\nAllow: /\n');
     assert.match(generatedIndex, /ZeroPress Preview/);
     assert.doesNotMatch(generatedIndex, /Public index/);
     assert.match(generatedAbout, /About/);
@@ -232,6 +234,26 @@ test('run copies ZEROPRESS_PUBLIC_DIR files before generated output', async () =
     assert.equal(await fs.readFile(path.join(distDir, 'schemas', 'preview-data.json'), 'utf8'), '{}');
     assert.equal(await fs.readFile(path.join(distDir, 'source.md'), 'utf8'), '# Source');
     await assert.rejects(() => fs.access(path.join(distDir, 'ignored.txt')));
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run ignores public robots.txt symlinks and keeps generated fallback robots', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'public'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'external-robots.txt'), 'User-agent: *\nDisallow: /\n', 'utf8');
+    await fs.symlink(path.join(tempDir, 'external-robots.txt'), path.join(tempDir, 'public', 'robots.txt'));
+
+    await run([goldenThemeDir, '--data', defaultPreviewDataPath]);
+
+    const robotsTxt = await fs.readFile(path.join(tempDir, 'dist', 'robots.txt'), 'utf8');
+    assert.match(robotsTxt, /^User-agent: \*\nAllow: \//);
   } finally {
     process.chdir(cwd);
     await fs.rm(tempDir, { recursive: true, force: true });

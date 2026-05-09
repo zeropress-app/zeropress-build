@@ -183,12 +183,17 @@ export async function runBuild(themeDir, previewData, outDir) {
   assertPublicPathDoesNotOverlap('Output directory', outDir);
   await assertThemeDirectory(themeDir);
   await assertEmptyOutputDirectory(outDir);
-  await copyPublicDirectory(resolvePublicDir(), outDir);
+  const publicDir = resolvePublicDir();
+  const hasPublicRobotsTxt = await publicRobotsTxtExists(publicDir);
+  await copyPublicDirectory(publicDir, outDir);
   const writer = new GeneratedOutputWriter({ outDir });
   return buildSiteFromThemeDir({
     previewData,
     themeDir,
     writer,
+    options: {
+      generateRobotsTxt: !hasPublicRobotsTxt,
+    },
   });
 }
 
@@ -252,6 +257,20 @@ export async function copyPublicDirectory(publicDir, outDir) {
   }
 
   await copyPublicEntries(publicDir, outDir);
+}
+
+async function publicRobotsTxtExists(publicDir) {
+  let stat;
+  try {
+    stat = await fs.lstat(path.join(publicDir, 'robots.txt'));
+  } catch (error) {
+    if (error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) {
+      return false;
+    }
+    throw error;
+  }
+
+  return stat.isFile();
 }
 
 async function copyPublicEntries(sourceDir, targetDir) {
