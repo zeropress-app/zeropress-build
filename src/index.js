@@ -8,6 +8,12 @@ const require = createRequire(import.meta.url);
 const { version: PACKAGE_VERSION } = require('../package.json');
 const DEFAULT_PUBLIC_DIR_NAME = 'public';
 const PUBLIC_DIR_ENV_NAME = 'ZEROPRESS_PUBLIC_DIR';
+const PUBLIC_FAVICON_FILES = Object.freeze({
+  icon: 'favicon.ico',
+  svg: 'favicon.svg',
+  png: 'favicon.png',
+  apple_touch_icon: 'apple-touch-icon.png',
+});
 
 export async function run(argv) {
   if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
@@ -185,6 +191,7 @@ export async function runBuild(themeDir, previewData, outDir) {
   await assertEmptyOutputDirectory(outDir);
   const publicDir = resolvePublicDir();
   const hasPublicRobotsTxt = await publicRobotsTxtExists(publicDir);
+  const publicFavicon = await discoverPublicFavicon(publicDir);
   await copyPublicDirectory(publicDir, outDir);
   const writer = new GeneratedOutputWriter({ outDir });
   return buildSiteFromThemeDir({
@@ -192,6 +199,7 @@ export async function runBuild(themeDir, previewData, outDir) {
     themeDir,
     writer,
     options: {
+      favicon: publicFavicon,
       generateRobotsTxt: !hasPublicRobotsTxt,
     },
   });
@@ -271,6 +279,28 @@ async function publicRobotsTxtExists(publicDir) {
   }
 
   return stat.isFile();
+}
+
+export async function discoverPublicFavicon(publicDir) {
+  const favicon = {};
+
+  for (const [key, filename] of Object.entries(PUBLIC_FAVICON_FILES)) {
+    let stat;
+    try {
+      stat = await fs.lstat(path.join(publicDir, filename));
+    } catch (error) {
+      if (error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) {
+        continue;
+      }
+      throw error;
+    }
+
+    if (stat.isFile()) {
+      favicon[key] = `/${filename}`;
+    }
+  }
+
+  return Object.keys(favicon).length ? favicon : undefined;
 }
 
 async function copyPublicEntries(sourceDir, targetDir) {

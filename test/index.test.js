@@ -171,6 +171,9 @@ test('run copies cwd public files before generated output', async () => {
     await fs.mkdir(path.join(tempDir, 'public', 'vendor'), { recursive: true });
     await fs.mkdir(path.join(tempDir, 'public', 'docs'), { recursive: true });
     await fs.writeFile(path.join(tempDir, 'public', 'favicon.ico'), 'icon', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'favicon.svg'), '<svg></svg>', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'favicon.png'), 'png', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'apple-touch-icon.png'), 'apple', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'vendor', 'app.js'), 'console.log("public")', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'docs', 'foo.md'), '# Foo', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'robots.txt'), 'User-agent: *\nDisallow: /\n\nUser-agent: Cloudflare-AI-Search\nAllow: /\n', 'utf8');
@@ -195,10 +198,17 @@ test('run copies cwd public files before generated output', async () => {
     const generatedAbout = await fs.readFile(path.join(distDir, 'about', 'index.html'), 'utf8');
 
     assert.equal(await fs.readFile(path.join(distDir, 'favicon.ico'), 'utf8'), 'icon');
+    assert.equal(await fs.readFile(path.join(distDir, 'favicon.svg'), 'utf8'), '<svg></svg>');
+    assert.equal(await fs.readFile(path.join(distDir, 'favicon.png'), 'utf8'), 'png');
+    assert.equal(await fs.readFile(path.join(distDir, 'apple-touch-icon.png'), 'utf8'), 'apple');
     assert.equal(await fs.readFile(path.join(distDir, 'vendor', 'app.js'), 'utf8'), 'console.log("public")');
     assert.equal(await fs.readFile(path.join(distDir, 'docs', 'foo.md'), 'utf8'), '# Foo');
     assert.equal(await fs.readFile(path.join(distDir, 'robots.txt'), 'utf8'), 'User-agent: *\nDisallow: /\n\nUser-agent: Cloudflare-AI-Search\nAllow: /\n');
     assert.match(generatedIndex, /ZeroPress Preview/);
+    assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.ico" sizes="any">/);
+    assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/);
+    assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
+    assert.match(generatedIndex, /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png">/);
     assert.doesNotMatch(generatedIndex, /Public index/);
     assert.match(generatedAbout, /About/);
     assert.doesNotMatch(generatedAbout, /Public about file/);
@@ -240,6 +250,32 @@ test('run copies ZEROPRESS_PUBLIC_DIR files before generated output', async () =
   }
 });
 
+test('run keeps explicit preview-data favicon ahead of public auto-discovery', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+  const previewDataPath = path.join(tempDir, 'preview.json');
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'public'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'public', 'favicon.ico'), 'icon', 'utf8');
+    const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+    previewData.site.favicon = {
+      icon: 'https://cdn.example.com/favicon.ico',
+    };
+    await fs.writeFile(previewDataPath, JSON.stringify(previewData), 'utf8');
+
+    await run([goldenThemeDir, '--data', previewDataPath]);
+
+    const indexHtml = await fs.readFile(path.join(tempDir, 'dist', 'index.html'), 'utf8');
+    assert.match(indexHtml, /<link rel="icon" href="https:\/\/cdn\.example\.com\/favicon\.ico" sizes="any">/);
+    assert.doesNotMatch(indexHtml, /href="\/favicon\.ico"/);
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('run ignores public robots.txt symlinks and keeps generated fallback robots', async () => {
   const cwd = process.cwd();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
@@ -254,6 +290,27 @@ test('run ignores public robots.txt symlinks and keeps generated fallback robots
 
     const robotsTxt = await fs.readFile(path.join(tempDir, 'dist', 'robots.txt'), 'utf8');
     assert.match(robotsTxt, /^User-agent: \*\nAllow: \//);
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run ignores public favicon symlinks', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'public'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'external-favicon.ico'), 'icon', 'utf8');
+    await fs.symlink(path.join(tempDir, 'external-favicon.ico'), path.join(tempDir, 'public', 'favicon.ico'));
+
+    await run([goldenThemeDir, '--data', defaultPreviewDataPath]);
+
+    const indexHtml = await fs.readFile(path.join(tempDir, 'dist', 'index.html'), 'utf8');
+    assert.doesNotMatch(indexHtml, /favicon\.ico/);
+    await assert.rejects(() => fs.access(path.join(tempDir, 'dist', 'favicon.ico')));
   } finally {
     process.chdir(cwd);
     await fs.rm(tempDir, { recursive: true, force: true });
