@@ -175,6 +175,7 @@ test('run copies cwd public files before generated output', async () => {
     await fs.writeFile(path.join(tempDir, 'public', 'favicon.svg'), '<svg></svg>', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'favicon.png'), 'png', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'apple-touch-icon.png'), 'apple', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'sitemap.xsl'), '<xsl:stylesheet version="1.0"></xsl:stylesheet>', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'vendor', 'app.js'), 'console.log("public")', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'docs', 'foo.md'), '# Foo', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'robots.txt'), 'User-agent: *\nDisallow: /\n\nUser-agent: Cloudflare-AI-Search\nAllow: /\n', 'utf8');
@@ -202,6 +203,7 @@ test('run copies cwd public files before generated output', async () => {
     assert.equal(await fs.readFile(path.join(distDir, 'favicon.svg'), 'utf8'), '<svg></svg>');
     assert.equal(await fs.readFile(path.join(distDir, 'favicon.png'), 'utf8'), 'png');
     assert.equal(await fs.readFile(path.join(distDir, 'apple-touch-icon.png'), 'utf8'), 'apple');
+    assert.equal(await fs.readFile(path.join(distDir, 'sitemap.xsl'), 'utf8'), '<xsl:stylesheet version="1.0"></xsl:stylesheet>');
     assert.equal(await fs.readFile(path.join(distDir, 'vendor', 'app.js'), 'utf8'), 'console.log("public")');
     assert.equal(await fs.readFile(path.join(distDir, 'docs', 'foo.md'), 'utf8'), '# Foo');
     assert.equal(await fs.readFile(path.join(distDir, 'robots.txt'), 'utf8'), 'User-agent: *\nDisallow: /\n\nUser-agent: Cloudflare-AI-Search\nAllow: /\n');
@@ -210,6 +212,10 @@ test('run copies cwd public files before generated output', async () => {
     assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/);
     assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
     assert.match(generatedIndex, /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png">/);
+    assert.match(
+      await fs.readFile(path.join(distDir, 'sitemap.xml'), 'utf8'),
+      /^<\?xml version="1\.0" encoding="UTF-8"\?>\n<\?xml-stylesheet type="text\/xsl" href="\/sitemap\.xsl"\?>\n<urlset/,
+    );
     assert.doesNotMatch(generatedIndex, /Public index/);
     assert.match(generatedAbout, /About/);
     assert.doesNotMatch(generatedAbout, /Public about file/);
@@ -342,6 +348,27 @@ test('run ignores public favicon symlinks', async () => {
     const indexHtml = await fs.readFile(path.join(tempDir, 'dist', 'index.html'), 'utf8');
     assert.doesNotMatch(indexHtml, /favicon\.ico/);
     await assert.rejects(() => fs.access(path.join(tempDir, 'dist', 'favicon.ico')));
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run ignores public sitemap.xsl symlinks', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'public'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'external-sitemap.xsl'), '<xsl:stylesheet version="1.0"></xsl:stylesheet>', 'utf8');
+    await fs.symlink(path.join(tempDir, 'external-sitemap.xsl'), path.join(tempDir, 'public', 'sitemap.xsl'));
+
+    await run([goldenThemeDir, '--data', defaultPreviewDataPath]);
+
+    const sitemapXml = await fs.readFile(path.join(tempDir, 'dist', 'sitemap.xml'), 'utf8');
+    assert.doesNotMatch(sitemapXml, /xml-stylesheet/);
+    await assert.rejects(() => fs.access(path.join(tempDir, 'dist', 'sitemap.xsl')));
   } finally {
     process.chdir(cwd);
     await fs.rm(tempDir, { recursive: true, force: true });

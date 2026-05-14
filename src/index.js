@@ -14,6 +14,7 @@ const PUBLIC_FAVICON_FILES = Object.freeze({
   png: 'favicon.png',
   apple_touch_icon: 'apple-touch-icon.png',
 });
+const PUBLIC_SITEMAP_STYLESHEET_FILE = 'sitemap.xsl';
 
 export async function run(argv) {
   if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
@@ -196,6 +197,7 @@ export async function runBuild(themeDir, previewData, outDir, options = {}) {
   await assertEmptyOutputDirectory(outDir);
   const hasPublicRobotsTxt = await publicRobotsTxtExists(publicDir);
   const publicFavicon = await discoverPublicFavicon(publicDir);
+  const sitemapStylesheetHref = await discoverPublicSitemapStylesheet(publicDir);
   await copyPublicDirectory(publicDir, outDir);
   const writer = new GeneratedOutputWriter({ outDir });
   return buildSiteFromThemeDir({
@@ -204,6 +206,7 @@ export async function runBuild(themeDir, previewData, outDir, options = {}) {
     writer,
     options: {
       favicon: publicFavicon,
+      sitemapStylesheetHref,
       generateRobotsTxt: !hasPublicRobotsTxt,
     },
   });
@@ -308,6 +311,20 @@ export async function discoverPublicFavicon(publicDir) {
   }
 
   return Object.keys(favicon).length ? favicon : undefined;
+}
+
+export async function discoverPublicSitemapStylesheet(publicDir) {
+  let stat;
+  try {
+    stat = await fs.lstat(path.join(publicDir, PUBLIC_SITEMAP_STYLESHEET_FILE));
+  } catch (error) {
+    if (error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) {
+      return undefined;
+    }
+    throw error;
+  }
+
+  return stat.isFile() ? `/${PUBLIC_SITEMAP_STYLESHEET_FILE}` : undefined;
 }
 
 async function copyPublicEntries(sourceDir, targetDir) {

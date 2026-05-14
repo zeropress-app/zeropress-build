@@ -87,6 +87,7 @@ zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 - `robots.txt` is the exception: a root-level public `robots.txt` is treated as the site owner's robots policy and prevents ZeroPress fallback `robots.txt` generation
 - When public `robots.txt` exists, ZeroPress copies it as-is and does not append a `Sitemap` directive. Add `Sitemap: https://example.com/sitemap.xml` manually when needed.
 - Root-level public favicon files named `favicon.ico`, `favicon.svg`, `favicon.png`, and `apple-touch-icon.png` are auto-discovered and injected into generated HTML `<head>` output unless preview-data already defines `site.favicon`
+- A root-level public `sitemap.xsl` is copied as-is. When ZeroPress generates `sitemap.xml`, it auto-discovers that file and adds an XML stylesheet processing instruction for `/sitemap.xsl`.
 - Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside the public directory are ignored
 - The theme directory and output directory must not overlap with the resolved public directory
 
