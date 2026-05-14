@@ -26,12 +26,12 @@ export async function run(argv) {
     return;
   }
 
-  const { themeDir, previewDataPath, outDir } = parseArgs(argv);
+  const { themeDir, previewDataPath, outDir, publicDir } = parseArgs(argv);
   const previewData = await loadPreviewData(previewDataPath);
   const startedAt = performance.now();
 
   try {
-    const result = await runBuild(themeDir, previewData, outDir);
+    const result = await runBuild(themeDir, previewData, outDir, { publicDir });
 
     const elapsedMs = Math.round(performance.now() - startedAt);
     console.log('Built ZeroPress site successfully');
@@ -47,7 +47,7 @@ function printHelp() {
   console.log(`zeropress-build - ZeroPress full-build CLI
 
 Usage:
-  zeropress-build <themeDir> --data <path> [--out <dir>]
+  zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]
 
 Arguments:
   <themeDir>            Theme directory to render
@@ -55,6 +55,7 @@ Arguments:
 Options:
   --data <path>         Canonical preview-data v0.5 JSON file
   --out <dir>           Empty output directory (default: ./dist)
+  --public-dir <dir>    Public passthrough directory (default: ./public)
   --help, -h            Show help
   --version, -v         Show version
 
@@ -72,7 +73,7 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
 
-    if (arg === '--data' || arg === '--out') {
+    if (arg === '--data' || arg === '--out' || arg === '--public-dir') {
       const value = argv[index + 1];
       if (!value || value.startsWith('--')) {
         throw new Error(`Invalid arguments: ${arg} requires a value`);
@@ -102,8 +103,11 @@ function parseArgs(argv) {
   const outDir = flags.out
     ? path.resolve(process.cwd(), flags.out)
     : path.resolve(process.cwd(), 'dist');
+  const publicDir = flags['public-dir']
+    ? path.resolve(process.cwd(), flags['public-dir'])
+    : undefined;
 
-  return { themeDir, previewDataPath, outDir };
+  return { themeDir, previewDataPath, outDir, publicDir };
 }
 
 async function loadPreviewData(previewDataPath) {
@@ -184,12 +188,12 @@ export async function assertThemeDirectory(themeDir) {
   }
 }
 
-export async function runBuild(themeDir, previewData, outDir) {
-  assertPublicPathDoesNotOverlap('Theme directory', themeDir);
-  assertPublicPathDoesNotOverlap('Output directory', outDir);
+export async function runBuild(themeDir, previewData, outDir, options = {}) {
+  const publicDir = resolvePublicDir(process.cwd(), options.publicDir);
+  assertPublicPathDoesNotOverlap('Theme directory', themeDir, process.cwd(), publicDir);
+  assertPublicPathDoesNotOverlap('Output directory', outDir, process.cwd(), publicDir);
   await assertThemeDirectory(themeDir);
   await assertEmptyOutputDirectory(outDir);
-  const publicDir = resolvePublicDir();
   const hasPublicRobotsTxt = await publicRobotsTxtExists(publicDir);
   const publicFavicon = await discoverPublicFavicon(publicDir);
   await copyPublicDirectory(publicDir, outDir);
@@ -244,7 +248,10 @@ export async function assertEmptyOutputDirectory(outDir) {
   }
 }
 
-export function resolvePublicDir(cwd = process.cwd()) {
+export function resolvePublicDir(cwd = process.cwd(), publicDir) {
+  if (publicDir) {
+    return path.resolve(cwd, publicDir);
+  }
   const envValue = process.env[PUBLIC_DIR_ENV_NAME]?.trim();
   return path.resolve(cwd, envValue || DEFAULT_PUBLIC_DIR_NAME);
 }
@@ -340,8 +347,7 @@ export function shouldIgnorePublicEntry(name) {
   );
 }
 
-export function assertPublicPathDoesNotOverlap(label, candidatePath, cwd = process.cwd()) {
-  const publicDir = resolvePublicDir(cwd);
+export function assertPublicPathDoesNotOverlap(label, candidatePath, cwd = process.cwd(), publicDir = resolvePublicDir(cwd)) {
   const resolvedCandidate = path.resolve(cwd, candidatePath);
   if (!pathsOverlap(publicDir, resolvedCandidate)) {
     return;

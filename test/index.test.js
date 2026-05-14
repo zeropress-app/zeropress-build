@@ -49,8 +49,9 @@ async function captureLogs(fn) {
 test('run prints help with no args', async () => {
   const logs = await captureLogs(() => run([]));
   assert.equal(logs.some((line) => line.includes('Usage:')), true);
-  assert.equal(logs.some((line) => line.includes('zeropress-build <themeDir> --data <path> [--out <dir>]')), true);
+  assert.equal(logs.some((line) => line.includes('zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]')), true);
   assert.equal(logs.some((line) => line.includes('Canonical preview-data v0.5 JSON file')), true);
+  assert.equal(logs.some((line) => line.includes('Public passthrough directory')), true);
   assert.equal(logs.some((line) => line.includes('selective or patch build is not supported')), true);
 });
 
@@ -250,6 +251,36 @@ test('run copies ZEROPRESS_PUBLIC_DIR files before generated output', async () =
   }
 });
 
+test('run copies --public-dir files and prefers it over ZEROPRESS_PUBLIC_DIR', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'docs', 'schemas'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'public'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'docs', 'favicon.ico'), 'icon', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'docs', 'robots.txt'), 'User-agent: *\nDisallow: /\n', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'docs', 'schemas', 'preview-data.json'), '{}', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'docs', 'source.md'), '# Source', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'ignored.txt'), 'ignored', 'utf8');
+
+    await withPublicDirEnv('public', () => run([goldenThemeDir, '--data', defaultPreviewDataPath, '--public-dir', 'docs']));
+
+    const distDir = path.join(tempDir, 'dist');
+    const indexHtml = await fs.readFile(path.join(distDir, 'index.html'), 'utf8');
+    assert.equal(await fs.readFile(path.join(distDir, 'favicon.ico'), 'utf8'), 'icon');
+    assert.equal(await fs.readFile(path.join(distDir, 'robots.txt'), 'utf8'), 'User-agent: *\nDisallow: /\n');
+    assert.match(indexHtml, /<link rel="icon" href="\/favicon\.ico" sizes="any">/);
+    assert.equal(await fs.readFile(path.join(distDir, 'schemas', 'preview-data.json'), 'utf8'), '{}');
+    assert.equal(await fs.readFile(path.join(distDir, 'source.md'), 'utf8'), '# Source');
+    await assert.rejects(() => fs.access(path.join(distDir, 'ignored.txt')));
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('run keeps explicit preview-data favicon ahead of public auto-discovery', async () => {
   const cwd = process.cwd();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
@@ -383,6 +414,39 @@ test('run rejects paths that overlap ZEROPRESS_PUBLIC_DIR', async () => {
   }
 });
 
+test('run rejects paths that overlap --public-dir', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'docs', 'theme'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'theme'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'docs', 'theme', 'theme.json'), '{}', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'theme', 'theme.json'), '{}', 'utf8');
+
+    await assert.rejects(
+      () => run(['docs', '--data', defaultPreviewDataPath, '--public-dir', 'docs']),
+      /Theme directory must not overlap the public directory:/,
+    );
+    await assert.rejects(
+      () => run(['docs/theme', '--data', defaultPreviewDataPath, '--public-dir', 'docs']),
+      /Theme directory must not overlap the public directory:/,
+    );
+    await assert.rejects(
+      () => run(['theme', '--data', defaultPreviewDataPath, '--out', 'docs', '--public-dir', 'docs']),
+      /Output directory must not overlap the public directory:/,
+    );
+    await assert.rejects(
+      () => run(['theme', '--data', defaultPreviewDataPath, '--out', 'docs/dist', '--public-dir', 'docs']),
+      /Output directory must not overlap the public directory:/,
+    );
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('run rejects a cwd public path that is not a directory', async () => {
   const cwd = process.cwd();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
@@ -411,6 +475,24 @@ test('run rejects a ZEROPRESS_PUBLIC_DIR path that is not a directory', async ()
 
     await assert.rejects(
       () => withPublicDirEnv('docs', () => run([goldenThemeDir, '--data', defaultPreviewDataPath])),
+      /Public path is not a directory:/,
+    );
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run rejects a --public-dir path that is not a directory', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.writeFile(path.join(tempDir, 'docs'), 'not a directory', 'utf8');
+
+    await assert.rejects(
+      () => run([goldenThemeDir, '--data', defaultPreviewDataPath, '--public-dir', 'docs']),
       /Public path is not a directory:/,
     );
   } finally {

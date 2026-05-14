@@ -34,7 +34,7 @@ npx @zeropress/build ./theme --data ./preview-data.json
 ## Usage
 
 ```bash
-zeropress-build <themeDir> --data <path> [--out <dir>]
+zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]
 ```
 
 ### Arguments
@@ -45,6 +45,7 @@ zeropress-build <themeDir> --data <path> [--out <dir>]
 
 - `--data <path>`: Canonical preview-data v0.5 JSON file
 - `--out <dir>`: Empty output directory, default `./dist`
+- `--public-dir <dir>`: Public passthrough directory, default `./public`
 - `--help, -h`: Show help
 - `--version, -v`: Show version
 
@@ -55,6 +56,7 @@ zeropress-build <themeDir> --data <path> [--out <dir>]
 ```bash
 zeropress-build ./my-theme --data ./preview-data.json
 zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
+zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 ```
 
 ---
@@ -77,8 +79,9 @@ zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
 
 - If the resolved public directory exists, its files are copied to the output root before generated ZeroPress files are written
 - The public directory name itself is not included in the output path
-- There is no `--public-dir` option; set `ZEROPRESS_PUBLIC_DIR` when a project needs a different public root
-- `ZEROPRESS_PUBLIC_DIR` defaults to `./public/`; relative values are resolved from the current working directory
+- The public directory defaults to `./public/`; use `--public-dir <dir>` or `ZEROPRESS_PUBLIC_DIR` when a project needs a different public root
+- Precedence is `--public-dir` > `ZEROPRESS_PUBLIC_DIR` > `./public/`
+- Relative public directory values are resolved from the current working directory
 - Public files can be used for files such as `favicon.ico`, `ads.txt`, third-party assets, source files, images, and PDFs
 - If a public file and a generated ZeroPress file use the same output path, the generated file wins
 - `robots.txt` is the exception: a root-level public `robots.txt` is treated as the site owner's robots policy and prevents ZeroPress fallback `robots.txt` generation
