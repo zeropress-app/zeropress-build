@@ -43,7 +43,7 @@ zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]
 
 ### Options
 
-- `--data <path>`: Canonical preview-data v0.5 JSON file
+- `--data <path>`: Canonical preview-data v0.6 JSON file
 - `--out <dir>`: Empty output directory, default `./dist`
 - `--public-dir <dir>`: Public passthrough directory, default `./public`
 - `--help, -h`: Show help
@@ -70,8 +70,8 @@ zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 
 ### Preview Data
 
-- `--data <path>` must point to canonical preview-data v0.5 JSON
-- The payload is validated by [`@zeropress/build-core`](https://www.npmjs.com/package/@zeropress/build-core) against the canonical preview-data v0.5 contract
+- `--data <path>` must point to canonical preview-data v0.6 JSON
+- The payload is validated by [`@zeropress/build-core`](https://www.npmjs.com/package/@zeropress/build-core) against the canonical preview-data v0.6 contract
 - Optional `custom_html` is treated as trusted site-level HTML and may inject markup before `</head>` and `</body>`
 - Only provide `custom_html` from trusted admin/generator input; ZeroPress does not sanitize that HTML
 

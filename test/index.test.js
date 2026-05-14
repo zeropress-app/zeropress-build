@@ -50,7 +50,7 @@ test('run prints help with no args', async () => {
   const logs = await captureLogs(() => run([]));
   assert.equal(logs.some((line) => line.includes('Usage:')), true);
   assert.equal(logs.some((line) => line.includes('zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]')), true);
-  assert.equal(logs.some((line) => line.includes('Canonical preview-data v0.5 JSON file')), true);
+  assert.equal(logs.some((line) => line.includes('Canonical preview-data v0.6 JSON file')), true);
   assert.equal(logs.some((line) => line.includes('Public passthrough directory')), true);
   assert.equal(logs.some((line) => line.includes('selective or patch build is not supported')), true);
 });

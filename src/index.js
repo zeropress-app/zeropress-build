@@ -53,7 +53,7 @@ Arguments:
   <themeDir>            Theme directory to render
 
 Options:
-  --data <path>         Canonical preview-data v0.5 JSON file
+  --data <path>         Canonical preview-data v0.6 JSON file
   --out <dir>           Empty output directory (default: ./dist)
   --public-dir <dir>    Public passthrough directory (default: ./public)
   --help, -h            Show help
