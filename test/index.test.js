@@ -173,7 +173,8 @@ test('run reports theme validation locations and script partial hints', async ()
     assert.match(message, /File: layout\.html/);
     assert.match(message, /Line: 4, Column: 1/);
     assert.match(message, /Category: theme_validation/);
-    assert.match(message, /Code: LAYOUT_SCRIPT_NOT_ALLOWED/);
+    assert.match(message, /ERROR LAYOUT_SCRIPT_NOT_ALLOWED/);
+    assert.match(message, /4 \| <script>alert\(1\)<\/script>/);
     assert.match(message, /partial:content-enhancements/);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
