@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const { version: PACKAGE_VERSION } = require('../package.json');
 const DEFAULT_PUBLIC_DIR_NAME = 'public';
 const PUBLIC_DIR_ENV_NAME = 'ZEROPRESS_PUBLIC_DIR';
+const PREVIEW_DATA_SOURCE = Symbol('zeropress.previewDataSource');
 const PUBLIC_FAVICON_FILES = Object.freeze({
   icon: 'favicon.ico',
   svg: 'favicon.svg',
@@ -40,7 +41,7 @@ export async function run(argv) {
     console.log(`Output: ${outDir}`);
     console.log(`Elapsed: ${elapsedMs}ms`);
   } catch (error) {
-    throw mapBuildError(error);
+    throw mapBuildError(error, previewData);
   }
 }
 
@@ -137,13 +138,20 @@ async function loadPreviewData(previewDataPath) {
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    throw new Error(`Invalid preview-data JSON: ${error.message}`);
+    throw formatPreviewDataJsonError(error, previewDataPath, raw);
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    Object.defineProperty(parsed, PREVIEW_DATA_SOURCE, {
+      value: { path: previewDataPath, raw },
+      enumerable: false,
+    });
   }
 
   return parsed;
 }
 
-function mapBuildError(error) {
+function mapBuildError(error, previewData) {
   const message = error instanceof Error ? error.message : String(error);
 
   if (message.startsWith('Theme directory not found:')) {
@@ -154,12 +162,13 @@ function mapBuildError(error) {
     return new Error(message);
   }
 
-  if (message.startsWith('Theme validation failed:')) {
-    return new Error(`Theme invalid: ${message.replace('Theme validation failed: ', '')}`);
+  if (message.startsWith('Theme validation failed')) {
+    const details = message.replace(/^Theme validation failed:?\s*/, '').trim();
+    return new Error(`Theme validation failed${details ? `\n\n${details}` : ''}`);
   }
 
   if (message.startsWith('Invalid preview-data')) {
-    return new Error(message);
+    return formatPreviewDataValidationError(message, previewData);
   }
 
   if (message.startsWith('Output path is not a directory:') || message.startsWith('Output directory must be empty:')) {
@@ -171,6 +180,266 @@ function mapBuildError(error) {
   }
 
   return new Error(`Build failed: ${message}`);
+}
+
+function formatPreviewDataJsonError(error, filePath, raw) {
+  const message = error instanceof Error ? error.message : String(error);
+  const location = locationForJsonParseError(message, raw);
+  const lines = [
+    'Invalid preview-data JSON',
+    '',
+    `File: ${filePath}`,
+  ];
+
+  if (location) {
+    lines.push(`Line: ${location.line}, Column: ${location.column}`);
+  }
+
+  lines.push('Category: json_syntax', `Reason: ${message}`);
+  return new Error(lines.join('\n'));
+}
+
+function formatPreviewDataValidationError(message, previewData) {
+  const parsed = parsePreviewDataValidationMessage(message);
+  if (!parsed) {
+    return new Error(message);
+  }
+
+  const source = previewData && typeof previewData === 'object'
+    ? previewData[PREVIEW_DATA_SOURCE]
+    : null;
+  const location = source ? findJsonPathLocation(source.raw, parsed.path) : null;
+  const lines = [
+    'Preview-data validation failed',
+    '',
+  ];
+
+  if (source?.path) {
+    lines.push(`File: ${source.path}`);
+  }
+  if (parsed.path) {
+    lines.push(`Path: ${parsed.path}`);
+  }
+  if (location) {
+    lines.push(`Line: ${location.line}, Column: ${location.column}`);
+  }
+  lines.push('Category: preview_data_validation', `Code: ${parsed.code}`, `Reason: ${parsed.reason}`);
+
+  const hint = previewDataHintForIssue(parsed.code);
+  if (hint) {
+    lines.push('', 'Hint:', hint);
+  }
+
+  return new Error(lines.join('\n'));
+}
+
+function parsePreviewDataValidationMessage(message) {
+  const match = /^Invalid preview-data:\s+([A-Z0-9_]+)\s+([^:]+):\s+(.+)$/s.exec(message);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    code: match[1],
+    path: match[2].trim(),
+    reason: match[3].trim(),
+  };
+}
+
+function previewDataHintForIssue(code) {
+  if (code === 'INVALID_MENU_ITEM_URL') {
+    return 'Use an absolute URL such as "https://example.com/" or a safe site path such as "/docs/".';
+  }
+
+  return '';
+}
+
+function locationForJsonParseError(message, raw) {
+  const lineColumnMatch = /\bline\s+(\d+)\s+column\s+(\d+)/i.exec(message);
+  if (lineColumnMatch) {
+    return {
+      line: Number(lineColumnMatch[1]),
+      column: Number(lineColumnMatch[2]),
+    };
+  }
+
+  const positionMatch = /\bposition\s+(\d+)/i.exec(message);
+  if (positionMatch) {
+    return locationForIndex(raw, Number(positionMatch[1]));
+  }
+
+  if (/Unexpected end of JSON input/i.test(message)) {
+    return locationForIndex(raw, raw.length);
+  }
+
+  return null;
+}
+
+function findJsonPathLocation(raw, jsonPath) {
+  const segments = parseJsonPathSegments(jsonPath);
+  if (segments.length === 0) {
+    return null;
+  }
+
+  let cursor = 0;
+  let lastKeyIndex = -1;
+
+  for (const segment of segments) {
+    if (typeof segment === 'number') {
+      const arrayStart = raw.indexOf('[', cursor);
+      if (arrayStart === -1) {
+        return lastKeyIndex >= 0 ? locationForIndex(raw, lastKeyIndex) : null;
+      }
+      cursor = findJsonArrayElementStart(raw, arrayStart, segment);
+      if (cursor === -1) {
+        return lastKeyIndex >= 0 ? locationForIndex(raw, lastKeyIndex) : null;
+      }
+      continue;
+    }
+
+    const keyIndex = findJsonKey(raw, segment, cursor);
+    if (keyIndex === -1) {
+      return lastKeyIndex >= 0 ? locationForIndex(raw, lastKeyIndex) : null;
+    }
+    lastKeyIndex = keyIndex;
+    cursor = raw.indexOf(':', keyIndex);
+    if (cursor === -1) {
+      return locationForIndex(raw, keyIndex);
+    }
+    cursor += 1;
+  }
+
+  return lastKeyIndex >= 0 ? locationForIndex(raw, lastKeyIndex) : null;
+}
+
+function parseJsonPathSegments(jsonPath) {
+  const segments = [];
+  const parts = String(jsonPath || '').split('.').filter(Boolean);
+
+  for (const part of parts) {
+    const nameMatch = /^([^\[]+)/.exec(part);
+    if (nameMatch) {
+      segments.push(nameMatch[1]);
+    }
+
+    const indexRegex = /\[(\d+)\]/g;
+    let match;
+    while ((match = indexRegex.exec(part)) !== null) {
+      segments.push(Number(match[1]));
+    }
+  }
+
+  return segments;
+}
+
+function findJsonKey(raw, key, startIndex) {
+  const needle = `"${escapeJsonString(key)}"`;
+  let cursor = Math.max(0, startIndex);
+
+  while (cursor < raw.length) {
+    const keyIndex = raw.indexOf(needle, cursor);
+    if (keyIndex === -1) {
+      return -1;
+    }
+    const afterKey = keyIndex + needle.length;
+    let lookahead = afterKey;
+    while (/\s/.test(raw[lookahead] || '')) {
+      lookahead += 1;
+    }
+    if (raw[lookahead] === ':') {
+      return keyIndex;
+    }
+    cursor = afterKey;
+  }
+
+  return -1;
+}
+
+function findJsonArrayElementStart(raw, arrayStart, targetIndex) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let elementIndex = 0;
+  let elementStart = -1;
+
+  for (let index = arrayStart + 1; index < raw.length; index += 1) {
+    const char = raw[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      if (elementStart === -1) {
+        elementStart = index;
+      }
+      continue;
+    }
+
+    if (char === '[' || char === '{') {
+      if (elementStart === -1) {
+        elementStart = index;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (char === ']' || char === '}') {
+      if (char === ']' && depth === 0) {
+        return elementIndex === targetIndex ? elementStart : -1;
+      }
+      depth -= 1;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      continue;
+    }
+
+    if (char === ',' && depth === 0) {
+      if (elementIndex === targetIndex) {
+        return elementStart;
+      }
+      elementIndex += 1;
+      elementStart = -1;
+      continue;
+    }
+
+    if (elementStart === -1) {
+      elementStart = index;
+    }
+  }
+
+  return -1;
+}
+
+function escapeJsonString(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function locationForIndex(source, index) {
+  const boundedIndex = Math.max(0, Math.min(Number.isInteger(index) ? index : 0, source.length));
+  let line = 1;
+  let column = 1;
+
+  for (let cursor = 0; cursor < boundedIndex; cursor += 1) {
+    if (source[cursor] === '\n') {
+      line += 1;
+      column = 1;
+    } else {
+      column += 1;
+    }
+  }
+
+  return { line, column };
 }
 
 export async function assertThemeDirectory(themeDir) {

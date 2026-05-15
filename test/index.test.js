@@ -46,6 +46,16 @@ async function captureLogs(fn) {
   }
 }
 
+async function captureRejectMessage(fn) {
+  try {
+    await fn();
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  assert.fail('Expected function to reject');
+}
+
 test('run prints help with no args', async () => {
   const logs = await captureLogs(() => run([]));
   assert.equal(logs.some((line) => line.includes('Usage:')), true);
@@ -93,11 +103,12 @@ test('run rejects invalid preview-data JSON', async () => {
   const invalidJsonPath = path.join(tempDir, 'invalid.json');
 
   try {
-    await fs.writeFile(invalidJsonPath, '{"broken":', 'utf8');
-    await assert.rejects(
-      () => run([goldenThemeDir, '--data', invalidJsonPath]),
-      /Invalid preview-data JSON:/
-    );
+    await fs.writeFile(invalidJsonPath, '{\n  "broken":\n', 'utf8');
+    const message = await captureRejectMessage(() => run([goldenThemeDir, '--data', invalidJsonPath]));
+    assert.match(message, /Invalid preview-data JSON/);
+    assert.match(message, /File: .*invalid\.json/);
+    assert.match(message, /Line: 3, Column: 1/);
+    assert.match(message, /Category: json_syntax/);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
@@ -108,11 +119,62 @@ test('run rejects preview-data that fails validation', async () => {
   const invalidPreviewPath = path.join(tempDir, 'preview.json');
 
   try {
-    await fs.writeFile(invalidPreviewPath, JSON.stringify({ version: '0.3' }), 'utf8');
-    await assert.rejects(
-      () => run([goldenThemeDir, '--data', invalidPreviewPath]),
-      /Invalid preview-data:/
-    );
+    const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+    previewData.version = '0.3';
+    await fs.writeFile(invalidPreviewPath, JSON.stringify(previewData, null, 2), 'utf8');
+    const message = await captureRejectMessage(() => run([goldenThemeDir, '--data', invalidPreviewPath]));
+    assert.match(message, /Preview-data validation failed/);
+    assert.match(message, /Path: version/);
+    assert.match(message, /Category: preview_data_validation/);
+    assert.match(message, /Code: INVALID_VERSION/);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run reports preview-data validation path locations and hints', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+  const invalidPreviewPath = path.join(tempDir, 'preview.json');
+
+  try {
+    const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+    previewData.menus.primary.items[0].url = 'not a url';
+    await fs.writeFile(invalidPreviewPath, JSON.stringify(previewData, null, 2), 'utf8');
+
+    const message = await captureRejectMessage(() => run([goldenThemeDir, '--data', invalidPreviewPath]));
+    assert.match(message, /Preview-data validation failed/);
+    assert.match(message, /Path: menus\.primary\.items\[0\]\.url/);
+    assert.match(message, /Line: \d+, Column: \d+/);
+    assert.match(message, /Category: preview_data_validation/);
+    assert.match(message, /Code: INVALID_MENU_ITEM_URL/);
+    assert.match(message, /Hint:\nUse an absolute URL/);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run reports theme validation locations and script partial hints', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+  const themeDir = path.join(tempDir, 'theme');
+
+  try {
+    await fs.cp(goldenThemeDir, themeDir, { recursive: true });
+    await fs.writeFile(path.join(themeDir, 'layout.html'), [
+      '<html>',
+      '<body>',
+      '<main>{{slot:content}}</main>',
+      '<script>alert(1)</script>',
+      '</body>',
+      '</html>',
+    ].join('\n'), 'utf8');
+
+    const message = await captureRejectMessage(() => run([themeDir, '--data', defaultPreviewDataPath]));
+    assert.match(message, /Theme validation failed/);
+    assert.match(message, /File: layout\.html/);
+    assert.match(message, /Line: 4, Column: 1/);
+    assert.match(message, /Category: theme_validation/);
+    assert.match(message, /Code: LAYOUT_SCRIPT_NOT_ALLOWED/);
+    assert.match(message, /partial:content-enhancements/);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
