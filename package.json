@@ -21,7 +21,10 @@
   "homepage": "https://github.com/zeropress-app/zeropress-build#readme",
   "keywords": [
     "zeropress",
-    "static-site-generator"
+    "ssg",
+    "static-site-generator",
+    "build",
+    "theme"
   ],
   "scripts": {
     "test": "node --test"
@@ -30,6 +33,6 @@
     "node": ">=18.18.0"
   },
   "dependencies": {
-    "@zeropress/build-core": "0.5.2"
+    "@zeropress/build-core": "0.6.1"
   }
 }

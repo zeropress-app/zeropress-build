@@ -4,11 +4,20 @@
 ![license](https://img.shields.io/npm/l/%40zeropress%2Fbuild)
 ![node](https://img.shields.io/node/v/%40zeropress%2Fbuild)
 
-ZeroPress full-build CLI.
+Public ZeroPress full-build CLI for Preview Data v0.6 and Theme Runtime v0.6.
 
-This package is the public CLI wrapper around `@zeropress/build-core`.
+This package builds a complete static site from a ZeroPress theme directory and canonical preview-data JSON.
 
----
+It uses directly:
+
+- [@zeropress/build-core](https://www.npmjs.com/package/@zeropress/build-core) for validation, rendering, asset output, and special-file generation
+
+Public contract references:
+
+- [Preview Data v0.6 Spec](https://zeropress.dev/spec/preview-data-v0.6.html)
+- [Preview Data v0.6 Schema](https://zeropress.dev/schemas/preview-data.v0.6.schema.json)
+- [Theme Runtime v0.6 Spec](https://zeropress.dev/spec/theme-runtime-v0.6.html)
+- [Theme Runtime v0.6 Schema](https://zeropress.dev/schemas/theme.v0.6.runtime.schema.json)
 
 ## Install
 
@@ -21,15 +30,27 @@ npm install -g @zeropress/build
 zeropress-build --help
 ```
 
----
-
 ## Quick Start
 
+If you need a starter theme and preview-data fixture first:
+
 ```bash
-npx @zeropress/build ./theme --data ./preview-data.json
+npx @zeropress/create-theme --name my-minimal --template minimal
 ```
 
----
+Then build the generated project:
+
+```bash
+npx @zeropress/build ./my-minimal/theme --data ./my-minimal/preview-data.json --out ./dist
+```
+
+If you already have a theme and preview-data file:
+
+```bash
+npx @zeropress/build ./theme --data ./preview-data.json --out ./dist
+```
+
+For theme authoring and live preview, use [@zeropress/theme](https://www.npmjs.com/package/@zeropress/theme). For Markdown-first sites, use [@zeropress/build-pages](https://www.npmjs.com/package/@zeropress/build-pages) instead of writing preview-data by hand.
 
 ## Usage
 
@@ -49,8 +70,6 @@ zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]
 - `--help, -h`: Show help
 - `--version, -v`: Show version
 
----
-
 ## Examples
 
 ```bash
@@ -58,8 +77,6 @@ zeropress-build ./my-theme --data ./preview-data.json
 zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
 zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 ```
-
----
 
 ## Inputs
 
@@ -82,6 +99,8 @@ zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 - The public directory defaults to `./public/`; use `--public-dir <dir>` or `ZEROPRESS_PUBLIC_DIR` when a project needs a different public root
 - Precedence is `--public-dir` > `ZEROPRESS_PUBLIC_DIR` > `./public/`
 - Relative public directory values are resolved from the current working directory
+- If the resolved public path does not exist, the build continues without public passthrough
+- If the resolved public path exists, it must be a real directory; files and symlinked directories are rejected
 - Public files can be used for files such as `favicon.ico`, `ads.txt`, third-party assets, source files, images, and PDFs
 - If a public file and a generated ZeroPress file use the same output path, the generated file wins
 - `robots.txt` is the exception: a root-level public `robots.txt` is treated as the site owner's robots policy and prevents ZeroPress fallback `robots.txt` generation
@@ -91,8 +110,6 @@ zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 - Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside the public directory are ignored
 - The theme directory and output directory must not overlap with the resolved public directory
 
----
-
 ## Output
 
 - If `--out` is omitted, output is written to `./dist` relative to the current working directory
@@ -101,8 +118,6 @@ zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 - On success, the CLI prints generated file count, output directory, and elapsed time
 - Full-build output includes the normal artifact set such as `index.html`, post and page routes, hashed assets, `sitemap.xml`, `feed.xml`, and fallback `robots.txt`
 - If preview-data sets `site.indexing: false`, the generated fallback `robots.txt` disallows all agents. Custom crawler policies should be provided as public `robots.txt`.
-
----
 
 ## Supported
 
@@ -116,22 +131,6 @@ zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 - Config files
 - Remote preview-data URLs
 - Deployment or publish integration
-
----
-
-## Requirements
-
-- Node.js >= 18.18.0
-- ESM only
-
----
-
-## Related
-
-- [@zeropress/build-core](https://www.npmjs.com/package/@zeropress/build-core)
-- [@zeropress/theme](https://www.npmjs.com/package/@zeropress/theme)
-
----
 
 ## License
 
