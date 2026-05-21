@@ -118,6 +118,7 @@ zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 - On success, the CLI prints generated file count, output directory, and elapsed time
 - Full-build output includes the normal artifact set such as `index.html`, post and page routes, hashed assets, `sitemap.xml`, `feed.xml`, and fallback `robots.txt`
 - If preview-data sets `site.indexing: false`, the generated fallback `robots.txt` disallows all agents. Custom crawler policies should be provided as public `robots.txt`.
+- Native search artifacts (`/_zeropress/search.json`, `/_zeropress/search.js`, and `/_zeropress/search_pagefind.js`) are emitted only when preview-data does not set `site.search: false` and the active theme declares `features.search: true`.
 
 ## Supported
 
