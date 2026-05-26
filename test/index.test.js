@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { run } from '../src/index.js';
+import { formatBuildSuccessMessage, run } from '../src/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, 'fixtures');
@@ -55,6 +55,47 @@ async function captureRejectMessage(fn) {
 
   assert.fail('Expected function to reject');
 }
+
+function withColorEnv(env, fn) {
+  const previousForceColor = process.env.FORCE_COLOR;
+  const previousNoColor = process.env.NO_COLOR;
+
+  if ('FORCE_COLOR' in env) {
+    process.env.FORCE_COLOR = env.FORCE_COLOR;
+  } else {
+    delete process.env.FORCE_COLOR;
+  }
+
+  if ('NO_COLOR' in env) {
+    process.env.NO_COLOR = env.NO_COLOR;
+  } else {
+    delete process.env.NO_COLOR;
+  }
+
+  try {
+    return fn();
+  } finally {
+    if (previousForceColor === undefined) {
+      delete process.env.FORCE_COLOR;
+    } else {
+      process.env.FORCE_COLOR = previousForceColor;
+    }
+
+    if (previousNoColor === undefined) {
+      delete process.env.NO_COLOR;
+    } else {
+      process.env.NO_COLOR = previousNoColor;
+    }
+  }
+}
+
+test('formatBuildSuccessMessage uses success color when color is enabled', () => {
+  const message = withColorEnv({ FORCE_COLOR: '1' }, () => (
+    formatBuildSuccessMessage({ isTTY: false })
+  ));
+
+  assert.equal(message, '\x1b[32mBuilt ZeroPress site successfully\x1b[0m');
+});
 
 test('run prints help with no args', async () => {
   const logs = await captureLogs(() => run([]));

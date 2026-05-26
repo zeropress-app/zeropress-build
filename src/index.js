@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { performance } from 'node:perf_hooks';
 import { buildSiteFromThemeDir } from '@zeropress/build-core';
+import { createColor } from './color.js';
 
 const require = createRequire(import.meta.url);
 const { version: PACKAGE_VERSION } = require('../package.json');
@@ -36,13 +37,17 @@ export async function run(argv) {
     const result = await runBuild(themeDir, previewData, outDir, { publicDir });
 
     const elapsedMs = Math.round(performance.now() - startedAt);
-    console.log('Built ZeroPress site successfully');
+    console.log(formatBuildSuccessMessage());
     console.log(`Files: ${result.files.length}`);
     console.log(`Output: ${outDir}`);
     console.log(`Elapsed: ${elapsedMs}ms`);
   } catch (error) {
     throw mapBuildError(error, previewData);
   }
+}
+
+export function formatBuildSuccessMessage(stream = process.stdout) {
+  return createColor(stream).green('Built ZeroPress site successfully');
 }
 
 function printHelp() {
