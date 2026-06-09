@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { formatBuildSuccessMessage, run } from '../src/index.js';
+import { formatBuildSuccessMessage, run, runBuild } from '../src/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, 'fixtures');
@@ -262,6 +262,22 @@ test('run writes a full build to an explicit outDir', async () => {
     await fs.access(path.join(outDir, 'archive', 'index.html'));
     await fs.access(path.join(outDir, 'categories', 'general', 'index.html'));
     await fs.access(path.join(outDir, 'tags', 'intro', 'index.html'));
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runBuild forwards generateFeed option to build-core', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+  const outDir = path.join(tempDir, 'site-output');
+  const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+
+  try {
+    await runBuild(goldenThemeDir, previewData, outDir, { generateFeed: false });
+    await fs.access(path.join(outDir, 'index.html'));
+    await fs.access(path.join(outDir, 'sitemap.xml'));
+    await assert.rejects(() => fs.access(path.join(outDir, 'feed.xml')));
+    await fs.access(path.join(outDir, 'robots.txt'));
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }

@@ -481,6 +481,7 @@ export async function runBuild(themeDir, previewData, outDir, options = {}) {
     options: {
       favicon: publicFavicon,
       sitemapStylesheetHref,
+      generateFeed: options.generateFeed,
       generateRobotsTxt: !hasPublicRobotsTxt,
     },
   });
