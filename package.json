@@ -1,6 +1,6 @@
 {
   "name": "@zeropress/build",
-  "version": "0.6.12",
+  "version": "0.6.13",
   "description": "ZeroPress full-build CLI",
   "type": "module",
   "license": "MIT",
