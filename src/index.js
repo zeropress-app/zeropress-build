@@ -12,6 +12,7 @@ const PUBLIC_DIR_ENV_NAME = 'ZEROPRESS_PUBLIC_DIR';
 const PREVIEW_DATA_SOURCE = Symbol('zeropress.previewDataSource');
 const PUBLIC_FAVICON_FILES = Object.freeze({
   icon: 'favicon.ico',
+  icon_dark: 'favicon.dark.ico',
   svg: 'favicon.svg',
   png: 'favicon.png',
   apple_touch_icon: 'apple-touch-icon.png',
@@ -60,7 +61,7 @@ Arguments:
   <themeDir>            Theme directory to render
 
 Options:
-  --data <path>         Canonical preview-data v0.6 JSON file
+  --data <path>         Canonical preview-data v0.7 JSON file
   --out <dir>           Empty output directory (default: ./dist)
   --public-dir <dir>    Public passthrough directory (default: ./public)
   --help, -h            Show help
@@ -472,9 +473,9 @@ export async function runBuild(themeDir, previewData, outDir, options = {}) {
   const hasPublicRobotsTxt = await publicRobotsTxtExists(publicDir);
   const publicFavicon = await discoverPublicFavicon(publicDir);
   const sitemapStylesheetHref = await discoverPublicSitemapStylesheet(publicDir);
-  await copyPublicDirectory(publicDir, outDir);
+  const publicOutputPaths = await listPublicOutputPaths(publicDir);
   const writer = new GeneratedOutputWriter({ outDir });
-  return buildSiteFromThemeDir({
+  const result = await buildSiteFromThemeDir({
     previewData,
     themeDir,
     writer,
@@ -483,8 +484,11 @@ export async function runBuild(themeDir, previewData, outDir, options = {}) {
       sitemapStylesheetHref,
       generateFeed: options.generateFeed,
       generateRobotsTxt: !hasPublicRobotsTxt,
+      reservedOutputPaths: publicOutputPaths,
     },
   });
+  await copyPublicDirectory(publicDir, outDir, publicOutputPaths);
+  return result;
 }
 
 class GeneratedOutputWriter {
@@ -534,13 +538,23 @@ export function resolvePublicDir(cwd = process.cwd(), publicDir) {
   return path.resolve(cwd, envValue || DEFAULT_PUBLIC_DIR_NAME);
 }
 
-export async function copyPublicDirectory(publicDir, outDir) {
+export async function copyPublicDirectory(publicDir, outDir, knownOutputPaths) {
+  const outputPaths = knownOutputPaths || await listPublicOutputPaths(publicDir);
+  for (const outputPath of outputPaths) {
+    const sourcePath = path.join(publicDir, outputPath);
+    const targetPath = path.join(outDir, outputPath);
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.copyFile(sourcePath, targetPath);
+  }
+}
+
+export async function listPublicOutputPaths(publicDir) {
   let rootStat;
   try {
     rootStat = await fs.lstat(publicDir);
   } catch (error) {
     if (error && error.code === 'ENOENT') {
-      return;
+      return [];
     }
     throw error;
   }
@@ -549,7 +563,9 @@ export async function copyPublicDirectory(publicDir, outDir) {
     throw new Error(`Public path is not a directory: ${publicDir}`);
   }
 
-  await copyPublicEntries(publicDir, outDir);
+  const outputPaths = [];
+  await collectPublicOutputPaths(publicDir, publicDir, outputPaths);
+  return outputPaths.sort((left, right) => left.localeCompare(right));
 }
 
 async function publicRobotsTxtExists(publicDir) {
@@ -602,19 +618,18 @@ export async function discoverPublicSitemapStylesheet(publicDir) {
   return stat.isFile() ? `/${PUBLIC_SITEMAP_STYLESHEET_FILE}` : undefined;
 }
 
-async function copyPublicEntries(sourceDir, targetDir) {
-  const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+async function collectPublicOutputPaths(rootDir, currentDir, outputPaths) {
+  const entries = await fs.readdir(currentDir, { withFileTypes: true });
 
   for (const entry of entries) {
     if (shouldIgnorePublicEntry(entry.name) || entry.isSymbolicLink()) {
       continue;
     }
 
-    const sourcePath = path.join(sourceDir, entry.name);
-    const targetPath = path.join(targetDir, entry.name);
+    const sourcePath = path.join(currentDir, entry.name);
 
     if (entry.isDirectory()) {
-      await copyPublicEntries(sourcePath, targetPath);
+      await collectPublicOutputPaths(rootDir, sourcePath, outputPaths);
       continue;
     }
 
@@ -622,8 +637,7 @@ async function copyPublicEntries(sourceDir, targetDir) {
       continue;
     }
 
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.copyFile(sourcePath, targetPath);
+    outputPaths.push(path.relative(rootDir, sourcePath).split(path.sep).join('/'));
   }
 }
 

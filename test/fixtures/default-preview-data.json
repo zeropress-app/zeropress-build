@@ -1,19 +1,22 @@
 {
-  "version": "0.6",
+  "version": "0.7",
   "generator": "zeropress-theme",
   "generated_at": "2026-03-26T00:00:00Z",
   "site": {
     "title": "ZeroPress Preview",
     "description": "Default preview data",
     "url": "https://example.com",
-    "media_base_url": "",
+    "media_origin": "",
     "locale": "en-US",
     "posts_per_page": 2,
-    "datetime_display": "static",
     "date_style": "medium",
     "time_style": "none",
     "timezone": "UTC",
-    "disallow_comments": false
+    "comments": {
+      "enabled": true,
+      "provider": "wordpress",
+      "api_base_url": "/wp-json/wp/v2"
+    }
   },
   "content": {
     "authors": [
@@ -24,7 +27,6 @@
     ],
     "posts": [
       {
-        "id": "post-1",
         "public_id": 101,
         "title": "Hello ZeroPress",
         "slug": "hello-zeropress",
@@ -44,7 +46,6 @@
         ]
       },
       {
-        "id": "post-2",
         "public_id": 102,
         "title": "Theme Blocks Deep Dive",
         "slug": "theme-blocks-deep-dive",
@@ -64,7 +65,6 @@
         ]
       },
       {
-        "id": "post-3",
         "public_id": 103,
         "title": "Archive Patterns",
         "slug": "archive-patterns",
@@ -114,14 +114,12 @@
         {
           "title": "Home",
           "url": "/",
-          "type": "custom",
           "target": "_self",
           "children": []
         },
         {
           "title": "Archive",
           "url": "/archive/",
-          "type": "custom",
           "target": "_self",
           "children": []
         }

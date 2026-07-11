@@ -101,7 +101,7 @@ test('run prints help with no args', async () => {
   const logs = await captureLogs(() => run([]));
   assert.equal(logs.some((line) => line.includes('Usage:')), true);
   assert.equal(logs.some((line) => line.includes('zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]')), true);
-  assert.equal(logs.some((line) => line.includes('Canonical preview-data v0.6 JSON file')), true);
+  assert.equal(logs.some((line) => line.includes('Canonical preview-data v0.7 JSON file')), true);
   assert.equal(logs.some((line) => line.includes('Public passthrough directory')), true);
   assert.equal(logs.some((line) => line.includes('selective or patch build is not supported')), true);
 });
@@ -283,7 +283,7 @@ test('runBuild forwards generateFeed option to build-core', async () => {
   }
 });
 
-test('run copies cwd public files before generated output', async () => {
+test('run copies non-conflicting cwd public files after generated output succeeds', async () => {
   const cwd = process.cwd();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
 
@@ -292,6 +292,7 @@ test('run copies cwd public files before generated output', async () => {
     await fs.mkdir(path.join(tempDir, 'public', 'vendor'), { recursive: true });
     await fs.mkdir(path.join(tempDir, 'public', 'docs'), { recursive: true });
     await fs.writeFile(path.join(tempDir, 'public', 'favicon.ico'), 'icon', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'favicon.dark.ico'), 'dark icon', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'favicon.svg'), '<svg></svg>', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'favicon.png'), 'png', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'apple-touch-icon.png'), 'apple', 'utf8');
@@ -299,8 +300,8 @@ test('run copies cwd public files before generated output', async () => {
     await fs.writeFile(path.join(tempDir, 'public', 'vendor', 'app.js'), 'console.log("public")', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'docs', 'foo.md'), '# Foo', 'utf8');
     await fs.writeFile(path.join(tempDir, 'public', 'robots.txt'), 'User-agent: *\nDisallow: /\n\nUser-agent: Cloudflare-AI-Search\nAllow: /\n', 'utf8');
-    await fs.writeFile(path.join(tempDir, 'public', 'index.html'), '<h1>Public index</h1>', 'utf8');
-    await fs.writeFile(path.join(tempDir, 'public', 'about'), 'Public about file', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'landing.html'), '<h1>Public landing</h1>', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'about-public.txt'), 'Public about file', 'utf8');
     await fs.mkdir(path.join(tempDir, 'public', '.git'), { recursive: true });
     await fs.mkdir(path.join(tempDir, 'public', '.vscode'), { recursive: true });
     await fs.mkdir(path.join(tempDir, 'public', 'node_modules'), { recursive: true });
@@ -320,25 +321,27 @@ test('run copies cwd public files before generated output', async () => {
     const generatedAbout = await fs.readFile(path.join(distDir, 'about', 'index.html'), 'utf8');
 
     assert.equal(await fs.readFile(path.join(distDir, 'favicon.ico'), 'utf8'), 'icon');
+    assert.equal(await fs.readFile(path.join(distDir, 'favicon.dark.ico'), 'utf8'), 'dark icon');
     assert.equal(await fs.readFile(path.join(distDir, 'favicon.svg'), 'utf8'), '<svg></svg>');
     assert.equal(await fs.readFile(path.join(distDir, 'favicon.png'), 'utf8'), 'png');
     assert.equal(await fs.readFile(path.join(distDir, 'apple-touch-icon.png'), 'utf8'), 'apple');
     assert.equal(await fs.readFile(path.join(distDir, 'sitemap.xsl'), 'utf8'), '<xsl:stylesheet version="1.0"></xsl:stylesheet>');
     assert.equal(await fs.readFile(path.join(distDir, 'vendor', 'app.js'), 'utf8'), 'console.log("public")');
     assert.equal(await fs.readFile(path.join(distDir, 'docs', 'foo.md'), 'utf8'), '# Foo');
+    assert.equal(await fs.readFile(path.join(distDir, 'landing.html'), 'utf8'), '<h1>Public landing</h1>');
+    assert.equal(await fs.readFile(path.join(distDir, 'about-public.txt'), 'utf8'), 'Public about file');
     assert.equal(await fs.readFile(path.join(distDir, 'robots.txt'), 'utf8'), 'User-agent: *\nDisallow: /\n\nUser-agent: Cloudflare-AI-Search\nAllow: /\n');
     assert.match(generatedIndex, /ZeroPress Preview/);
-    assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.ico" sizes="any">/);
-    assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/);
-    assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
+    assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.ico" media="\(prefers-color-scheme: light\)">/);
+    assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.dark\.ico" media="\(prefers-color-scheme: dark\)">/);
+    assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml" media="\(prefers-color-scheme: light\)">/);
+    assert.match(generatedIndex, /<link rel="icon" href="\/favicon\.png" type="image\/png" media="\(prefers-color-scheme: light\)">/);
     assert.match(generatedIndex, /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png">/);
     assert.match(
       await fs.readFile(path.join(distDir, 'sitemap.xml'), 'utf8'),
       /^<\?xml version="1\.0" encoding="UTF-8"\?>\n<\?xml-stylesheet type="text\/xsl" href="\/sitemap\.xsl"\?>\n<urlset/,
     );
-    assert.doesNotMatch(generatedIndex, /Public index/);
     assert.match(generatedAbout, /About/);
-    assert.doesNotMatch(generatedAbout, /Public about file/);
     await assert.rejects(() => fs.access(path.join(distDir, '.env')));
     await assert.rejects(() => fs.access(path.join(distDir, '.DS_Store')));
     await assert.rejects(() => fs.access(path.join(distDir, '.git', 'config')));
@@ -353,7 +356,94 @@ test('run copies cwd public files before generated output', async () => {
   }
 });
 
-test('run copies ZEROPRESS_PUBLIC_DIR files before generated output', async () => {
+test('runBuild rejects public files that collide with generated output before writing', async () => {
+  const basePreviewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+  const cases = [
+    {
+      name: 'directory route output',
+      publicPath: 'about/index.html',
+      mutate() {},
+    },
+    {
+      name: 'directory route clean html alias',
+      publicPath: 'about.html',
+      mutate() {},
+    },
+    {
+      name: 'html-extension route output',
+      publicPath: 'about.html',
+      mutate(previewData) {
+        previewData.site.permalinks = {
+          output_style: 'html-extension',
+          posts: '/posts/:slug/',
+          pages: '/:slug/',
+          categories: '/categories/:slug/',
+          tags: '/tags/:slug/',
+        };
+      },
+    },
+    {
+      name: 'html-extension route clean index alias',
+      publicPath: 'about/index.html',
+      mutate(previewData) {
+        previewData.site.permalinks = {
+          output_style: 'html-extension',
+          posts: '/posts/:slug/',
+          pages: '/:slug/',
+          categories: '/categories/:slug/',
+          tags: '/tags/:slug/',
+        };
+      },
+    },
+    {
+      name: 'dotted route public URL',
+      publicPath: 'favicon.ico',
+      mutate(previewData) {
+        previewData.content.pages[0].slug = 'favicon.ico';
+      },
+    },
+  ];
+
+  for (const testCase of cases) {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-public-collision-'));
+    const publicDir = path.join(tempDir, 'public');
+    const outDir = path.join(tempDir, 'dist');
+    const previewData = structuredClone(basePreviewData);
+    testCase.mutate(previewData);
+    await fs.mkdir(path.dirname(path.join(publicDir, testCase.publicPath)), { recursive: true });
+    await fs.writeFile(path.join(publicDir, testCase.publicPath), 'public', 'utf8');
+
+    try {
+      await assert.rejects(
+        () => runBuild(goldenThemeDir, previewData, outDir, { publicDir }),
+        /Duplicate (?:output path|public URL) detected:/,
+        testCase.name,
+      );
+      await assert.rejects(fs.access(outDir), { code: 'ENOENT' });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  }
+});
+
+test('runBuild rejects a directory route shadowed by the generated 404 clean URL', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-special-file-collision-'));
+  const outDir = path.join(tempDir, 'dist');
+  const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+  previewData.content.pages[0].slug = '404';
+
+  try {
+    await assert.rejects(
+      () => runBuild(goldenThemeDir, previewData, outDir),
+      /Duplicate public URL detected: \/404/,
+    );
+    await assert.rejects(fs.access(outDir), { code: 'ENOENT' });
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run copies ZEROPRESS_PUBLIC_DIR files after generated output succeeds', async () => {
   const cwd = process.cwd();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
 
@@ -397,7 +487,7 @@ test('run copies --public-dir files and prefers it over ZEROPRESS_PUBLIC_DIR', a
     const indexHtml = await fs.readFile(path.join(distDir, 'index.html'), 'utf8');
     assert.equal(await fs.readFile(path.join(distDir, 'favicon.ico'), 'utf8'), 'icon');
     assert.equal(await fs.readFile(path.join(distDir, 'robots.txt'), 'utf8'), 'User-agent: *\nDisallow: /\n');
-    assert.match(indexHtml, /<link rel="icon" href="\/favicon\.ico" sizes="any">/);
+    assert.match(indexHtml, /<link rel="icon" href="\/favicon\.ico">/);
     assert.equal(await fs.readFile(path.join(distDir, 'schemas', 'preview-data.json'), 'utf8'), '{}');
     assert.equal(await fs.readFile(path.join(distDir, 'source.md'), 'utf8'), '# Source');
     await assert.rejects(() => fs.access(path.join(distDir, 'ignored.txt')));
@@ -416,6 +506,7 @@ test('run keeps explicit preview-data favicon ahead of public auto-discovery', a
     process.chdir(tempDir);
     await fs.mkdir(path.join(tempDir, 'public'), { recursive: true });
     await fs.writeFile(path.join(tempDir, 'public', 'favicon.ico'), 'icon', 'utf8');
+    await fs.writeFile(path.join(tempDir, 'public', 'favicon.dark.ico'), 'dark icon', 'utf8');
     const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
     previewData.site.favicon = {
       icon: 'https://cdn.example.com/favicon.ico',
@@ -425,8 +516,9 @@ test('run keeps explicit preview-data favicon ahead of public auto-discovery', a
     await run([goldenThemeDir, '--data', previewDataPath]);
 
     const indexHtml = await fs.readFile(path.join(tempDir, 'dist', 'index.html'), 'utf8');
-    assert.match(indexHtml, /<link rel="icon" href="https:\/\/cdn\.example\.com\/favicon\.ico" sizes="any">/);
+    assert.match(indexHtml, /<link rel="icon" href="https:\/\/cdn\.example\.com\/favicon\.ico">/);
     assert.doesNotMatch(indexHtml, /href="\/favicon\.ico"/);
+    assert.doesNotMatch(indexHtml, /href="\/favicon\.dark\.ico"/);
   } finally {
     process.chdir(cwd);
     await fs.rm(tempDir, { recursive: true, force: true });

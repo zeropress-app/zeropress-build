@@ -4,7 +4,7 @@
 ![license](https://img.shields.io/npm/l/%40zeropress%2Fbuild)
 ![node](https://img.shields.io/node/v/%40zeropress%2Fbuild)
 
-Public ZeroPress full-build CLI for Preview Data v0.6 and Theme Runtime v0.6.
+Public ZeroPress full-build CLI for Preview Data v0.7 and Theme Runtime v0.7.
 
 This package builds a complete static site from a ZeroPress theme directory and canonical preview-data JSON.
 
@@ -14,10 +14,10 @@ It uses directly:
 
 Public contract references:
 
-- [Preview Data v0.6 Spec](https://zeropress.dev/spec/preview-data-v0.6.html)
-- [Preview Data v0.6 Schema](https://schemas.zeropress.dev/preview-data/v0.6/schema.json)
-- [Theme Runtime v0.6 Spec](https://zeropress.dev/spec/theme-runtime-v0.6.html)
-- [Theme Runtime v0.6 Schema](https://schemas.zeropress.dev/theme-runtime/v0.6/schema.json)
+- [Preview Data v0.7 Spec](https://zeropress.dev/reference/preview-data/specs/v0.7/)
+- [Preview Data v0.7 Schema](https://schemas.zeropress.dev/preview-data/v0.7/schema.json)
+- [Theme Runtime v0.7 Spec](https://zeropress.dev/reference/theme-runtime/specs/v0.7/)
+- [Theme Runtime v0.7 Schema](https://schemas.zeropress.dev/theme-runtime/v0.7/schema.json)
 
 ## Install
 
@@ -64,7 +64,7 @@ zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]
 
 ### Options
 
-- `--data <path>`: Canonical preview-data v0.6 JSON file
+- `--data <path>`: Canonical preview-data v0.7 JSON file
 - `--out <dir>`: Empty output directory, default `./dist`
 - `--public-dir <dir>`: Public passthrough directory, default `./public`
 - `--help, -h`: Show help
@@ -87,14 +87,16 @@ zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 
 ### Preview Data
 
-- `--data <path>` must point to canonical preview-data v0.6 JSON
-- The payload is validated by [`@zeropress/build-core`](https://www.npmjs.com/package/@zeropress/build-core) against the canonical preview-data v0.6 contract
-- Optional `custom_html` is treated as trusted site-level HTML and may inject markup before `</head>` and `</body>`
+- `--data <path>` must point to canonical preview-data v0.7 JSON
+- The payload is validated by [`@zeropress/build-core`](https://www.npmjs.com/package/@zeropress/build-core) against the canonical preview-data v0.7 contract
+- Optional `custom_html` uses trusted raw slot strings such as `{ "head_end": "<meta ...>", "body_end": "<script ...></script>" }` and injects them before `</head>` and `</body>`
+- Each `custom_html` slot is limited to 65,536 Unicode code points; larger code should be served as a public asset and referenced by URL
 - Only provide `custom_html` from trusted admin/generator input; ZeroPress does not sanitize that HTML
+- A configured slot must exist in every theme-rendered HTML document or the build fails; standalone HTML front pages remain untouched
 
 ### Public Directory
 
-- If the resolved public directory exists, its files are copied to the output root before generated ZeroPress files are written
+- If the resolved public directory exists, its file paths are reserved during output planning and copied to the output root after generated ZeroPress files are written successfully
 - The public directory name itself is not included in the output path
 - The public directory defaults to `./public/`; use `--public-dir <dir>` or `ZEROPRESS_PUBLIC_DIR` when a project needs a different public root
 - Precedence is `--public-dir` > `ZEROPRESS_PUBLIC_DIR` > `./public/`
@@ -102,10 +104,10 @@ zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 - If the resolved public path does not exist, the build continues without public passthrough
 - If the resolved public path exists, it must be a real directory; files and symlinked directories are rejected
 - Public files can be used for files such as `favicon.ico`, `ads.txt`, third-party assets, source files, images, and PDFs
-- If a public file and a generated ZeroPress file use the same output path, the generated file wins
+- A public file must not collide with a generated route, asset, search artifact, or special file by public URL (including `page.html` → `/page` and `page/index.html` → `/page/` clean-host aliases), exact output path, or file/directory hierarchy. The build fails before writing instead of relying on host-specific precedence.
 - `robots.txt` is the exception: a root-level public `robots.txt` is treated as the site owner's robots policy and prevents ZeroPress fallback `robots.txt` generation
 - When public `robots.txt` exists, ZeroPress copies it as-is and does not append a `Sitemap` directive. Add `Sitemap: https://example.com/sitemap.xml` manually when needed.
-- Root-level public favicon files named `favicon.ico`, `favicon.svg`, `favicon.png`, and `apple-touch-icon.png` are auto-discovered and injected into generated HTML `<head>` output unless preview-data already defines `site.favicon`
+- Root-level public favicon files named `favicon.ico`, `favicon.dark.ico`, `favicon.svg`, `favicon.png`, and `apple-touch-icon.png` are auto-discovered and injected into generated HTML `<head>` output unless preview-data already defines `site.favicon`. When both ICO files exist, `favicon.dark.ico` is used for the dark color scheme and the regular icon variants are used for the light color scheme; a lone ICO file is used for every color scheme
 - A root-level public `sitemap.xsl` is copied as-is. When ZeroPress generates `sitemap.xml`, it auto-discovers that file and adds an XML stylesheet processing instruction for `/sitemap.xsl`.
 - Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside the public directory are ignored
 - The theme directory and output directory must not overlap with the resolved public directory
@@ -116,22 +118,16 @@ zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 - The output directory must not already contain files before the command runs
 - The output directory must be empty before public files are copied
 - On success, the CLI prints generated file count, output directory, and elapsed time
-- Full-build output includes the normal artifact set such as `index.html`, post and page routes, hashed assets, `sitemap.xml`, `feed.xml`, and fallback `robots.txt`
-- If preview-data sets `site.indexing: false`, the generated fallback `robots.txt` disallows all agents. Custom crawler policies should be provided as public `robots.txt`.
-- Native search artifacts (`/_zeropress/search.json`, `/_zeropress/search.js`, and `/_zeropress/search_pagefind.js`) are emitted only when preview-data does not set `site.search: false` and the active theme declares `features.search: true`.
+- Full-build output includes the normal artifact set such as `index.html`, post and page routes, hashed assets, `sitemap.xml`, an enabled `feed.xml`, and fallback `robots.txt`
+- If preview-data sets `site.robots.allow_indexing: false`, the generated fallback `robots.txt` disallows all agents. Custom crawler policies should be provided as public `robots.txt`.
+- Native search artifacts (`/_zeropress/search.json`, `/_zeropress/search.js`, and `/_zeropress/search_pagefind.js`) are emitted only when preview-data does not set `site.search.enabled: false` and the active theme declares `features.search: true`.
+- `site.feed.enabled: false` suppresses `feed.xml`; `site.archive.enabled: false` suppresses chronological archive routes. Disabled outputs do not reserve their public paths.
 
 ## Supported
 
 - Full build only
 - Local theme directory input
 - Local preview-data JSON input
-
-## Not Supported
-
-- Selective or patch build input
-- Config files
-- Remote preview-data URLs
-- Deployment or publish integration
 
 ## License
 
