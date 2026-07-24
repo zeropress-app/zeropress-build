@@ -33,6 +33,6 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
-    "@zeropress/build-core": "0.6.13"
+    "@zeropress/build-core": "0.7.1"
   }
 }
