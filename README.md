@@ -78,6 +78,21 @@ zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
 zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
 ```
 
+## Programmatic API
+
+The package root exposes the same full-build operation used by the CLI:
+
+```js
+import { runBuild } from '@zeropress/build';
+
+const result = await runBuild(themeDir, previewData, outDir, {
+  publicDir,
+  generateFeed: false,
+});
+```
+
+`runBuild()` accepts an absolute or working-directory-relative theme directory, canonical Preview Data v0.7, an output directory, and optional Build settings. It validates the inputs, writes the complete site, and returns the Build Core result.
+
 ## Inputs
 
 ### Theme Directory

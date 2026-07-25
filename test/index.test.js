@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as packageApi from '@zeropress/build';
 import { formatBuildSuccessMessage, run, runBuild } from '../src/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -11,6 +12,11 @@ const fixturesDir = path.join(__dirname, 'fixtures');
 const goldenThemeDir = path.join(fixturesDir, 'golden-theme');
 const defaultPreviewDataPath = path.join(fixturesDir, 'default-preview-data.json');
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
+
+test('package root exports the programmatic build API', () => {
+  assert.deepEqual(Object.keys(packageApi), ['runBuild']);
+  assert.equal(packageApi.runBuild, runBuild);
+});
 
 function withPublicDirEnv(value, fn) {
   const previousValue = process.env.ZEROPRESS_PUBLIC_DIR;

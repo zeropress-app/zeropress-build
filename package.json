@@ -3,6 +3,9 @@
   "version": "0.7.0",
   "description": "ZeroPress full-build CLI",
   "type": "module",
+  "exports": {
+    ".": "./src/api.js"
+  },
   "license": "MIT",
   "bin": {
     "zeropress-build": "bin/zeropress-build.js"
