@@ -55,7 +55,7 @@ For theme authoring and live preview, use [@zeropress/theme](https://www.npmjs.c
 ## Usage
 
 ```bash
-zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]
+zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir]
 ```
 
 ### Arguments
@@ -65,8 +65,9 @@ zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]
 ### Options
 
 - `--data <path>`: Canonical preview-data v0.7 JSON file
-- `--out <dir>`: Empty output directory, default `./dist`
+- `--out <dir>`: Output directory, default `./dist`
 - `--public-dir <dir>`: Public passthrough directory, default `./public`
+- `--empty-out-dir`: Build in a sibling staging directory and replace an existing output only after the new build succeeds
 - `--help, -h`: Show help
 - `--version, -v`: Show version
 
@@ -87,11 +88,14 @@ import { runBuild } from '@zeropress/build';
 
 const result = await runBuild(themeDir, previewData, outDir, {
   publicDir,
+  emptyOutDir: true,
+  projectRoot: process.cwd(),
+  previewDataPath: './preview-data.json',
   generateFeed: false,
 });
 ```
 
-`runBuild()` accepts an absolute or working-directory-relative theme directory, canonical Preview Data v0.7, an output directory, and optional Build settings. It validates the inputs, writes the complete site, and returns the Build Core result.
+`runBuild()` accepts an absolute or working-directory-relative theme directory, canonical Preview Data v0.7, an output directory, and optional Build settings. It validates the inputs, writes the complete site, and returns the Build Core result. `emptyOutDir` is disabled by default. When enabled, `projectRoot` defines the replacement safety boundary and `previewDataPath` protects the source file from output overlap.
 
 ## Inputs
 
@@ -130,8 +134,10 @@ const result = await runBuild(themeDir, previewData, outDir, {
 ## Output
 
 - If `--out` is omitted, output is written to `./dist` relative to the current working directory
-- The output directory must not already contain files before the command runs
-- The output directory must be empty before public files are copied
+- The output directory must not already contain files unless `--empty-out-dir` is explicit
+- Generated and public files are assembled together in the empty staging directory
+- Every build is assembled in a sibling staging directory. A failed build leaves an existing output untouched, while a successful build replaces the output as one commit operation.
+- Replacement output must be a strict descendant of the current working directory, must not contain a symbolic-link path component, and must not overlap the theme, public directory, or Preview Data source
 - On success, the CLI prints generated file count, output directory, and elapsed time
 - Full-build output includes the normal artifact set such as `index.html`, post and page routes, hashed assets, `sitemap.xml`, an enabled `feed.xml`, and fallback `robots.txt`
 - If preview-data sets `site.robots.allow_indexing: false`, the generated fallback `robots.txt` disallows all agents. Custom crawler policies should be provided as public `robots.txt`.

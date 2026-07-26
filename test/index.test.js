@@ -106,7 +106,12 @@ test('formatBuildSuccessMessage uses success color when color is enabled', () =>
 test('run prints help with no args', async () => {
   const logs = await captureLogs(() => run([]));
   assert.equal(logs.some((line) => line.includes('Usage:')), true);
-  assert.equal(logs.some((line) => line.includes('zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]')), true);
+  assert.equal(
+    logs.some((line) => line.includes(
+      'zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir]',
+    )),
+    true,
+  );
   assert.equal(logs.some((line) => line.includes('Canonical preview-data v0.7 JSON file')), true);
   assert.equal(logs.some((line) => line.includes('Public passthrough directory')), true);
   assert.equal(logs.some((line) => line.includes('selective or patch build is not supported')), true);
@@ -758,6 +763,191 @@ test('run rejects a non-empty output directory', async () => {
       () => run([goldenThemeDir, '--data', defaultPreviewDataPath, '--out', outDir]),
       /Output directory must be empty:/
     );
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run replaces a non-empty output only with --empty-out-dir', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-replace-'));
+  let outDir;
+
+  try {
+    process.chdir(tempDir);
+    outDir = path.join(process.cwd(), 'dist');
+    await fs.mkdir(outDir);
+    await fs.writeFile(path.join(outDir, 'stale.txt'), 'stale output', 'utf8');
+
+    await run([
+      goldenThemeDir,
+      '--data',
+      defaultPreviewDataPath,
+      '--out',
+      outDir,
+      '--empty-out-dir',
+    ]);
+
+    await fs.access(path.join(outDir, 'index.html'));
+    await fs.access(path.join(outDir, 'robots.txt'));
+    await assert.rejects(fs.access(path.join(outDir, 'stale.txt')), { code: 'ENOENT' });
+    assert.equal(
+      (await fs.readdir(tempDir)).some((entry) => entry.startsWith('.dist.zeropress-build-')),
+      false,
+    );
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runBuild preserves the previous output when a replacement build fails', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-preserve-'));
+  const outDir = path.join(tempDir, 'dist');
+  const publicDir = path.join(tempDir, 'public');
+  const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+  previewData.version = 'invalid';
+
+  try {
+    await fs.mkdir(outDir);
+    await fs.writeFile(path.join(outDir, 'sentinel.txt'), 'previous output', 'utf8');
+
+    await assert.rejects(
+      () => runBuild(goldenThemeDir, previewData, outDir, {
+        emptyOutDir: true,
+        projectRoot: tempDir,
+        publicDir,
+      }),
+      /Invalid preview-data/,
+    );
+
+    assert.equal(
+      await fs.readFile(path.join(outDir, 'sentinel.txt'), 'utf8'),
+      'previous output',
+    );
+    assert.deepEqual(await fs.readdir(outDir), ['sentinel.txt']);
+    assert.equal(
+      (await fs.readdir(tempDir)).some((entry) => entry.startsWith('.dist.zeropress-build-')),
+      false,
+    );
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runBuild restricts replacement output to a safe project descendant', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-boundary-'));
+  const projectRoot = path.join(tempDir, 'project');
+  const outsideOutDir = path.join(tempDir, 'outside');
+  const outsidePublicDir = path.join(tempDir, 'public');
+  const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+
+  try {
+    await fs.mkdir(projectRoot);
+
+    await assert.rejects(
+      () => runBuild(goldenThemeDir, previewData, projectRoot, {
+        emptyOutDir: true,
+        projectRoot,
+        publicDir: outsidePublicDir,
+      }),
+      /Replacement output directory must be strictly inside the project root:/,
+    );
+
+    await assert.rejects(
+      () => runBuild(goldenThemeDir, previewData, outsideOutDir, {
+        emptyOutDir: true,
+        projectRoot,
+        publicDir: outsidePublicDir,
+      }),
+      /Replacement output directory must be strictly inside the project root:/,
+    );
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runBuild accepts a replacement output child whose name starts with two periods', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-dotdot-name-'));
+  const outDir = path.join(tempDir, '..dist');
+  const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+
+  try {
+    await fs.mkdir(outDir);
+    await fs.writeFile(path.join(outDir, 'stale.txt'), 'stale output', 'utf8');
+
+    await runBuild(goldenThemeDir, previewData, outDir, {
+      emptyOutDir: true,
+      projectRoot: tempDir,
+      publicDir: path.join(tempDir, 'public'),
+    });
+
+    await fs.access(path.join(outDir, 'index.html'));
+    await assert.rejects(fs.access(path.join(outDir, 'stale.txt')), { code: 'ENOENT' });
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runBuild rejects replacement output that overlaps build inputs', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-input-overlap-'));
+  const themeDir = path.join(tempDir, 'theme');
+  const previewDir = path.join(tempDir, 'preview-output');
+  const previewDataPath = path.join(previewDir, 'preview-data.json');
+  const publicDir = path.join(tempDir, 'public');
+  const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+
+  try {
+    await fs.cp(goldenThemeDir, themeDir, { recursive: true });
+    await fs.mkdir(previewDir);
+    await fs.writeFile(previewDataPath, JSON.stringify(previewData), 'utf8');
+
+    await assert.rejects(
+      () => runBuild(themeDir, previewData, path.join(themeDir, 'dist'), {
+        emptyOutDir: true,
+        projectRoot: tempDir,
+        publicDir,
+      }),
+      /Replacement output directory must not overlap the theme directory:/,
+    );
+
+    await assert.rejects(
+      () => runBuild(themeDir, previewData, previewDir, {
+        emptyOutDir: true,
+        previewDataPath,
+        projectRoot: tempDir,
+        publicDir,
+      }),
+      /Replacement output directory must not contain the preview-data file:/,
+    );
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runBuild rejects symbolic-link components in a replacement output path', {
+  skip: process.platform === 'win32'
+    ? 'symlink creation is not consistently available on Windows'
+    : false,
+}, async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-output-symlink-'));
+  const realDir = path.join(tempDir, 'real');
+  const aliasDir = path.join(tempDir, 'alias');
+  const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+
+  try {
+    await fs.mkdir(realDir);
+    await fs.symlink(realDir, aliasDir, 'dir');
+
+    await assert.rejects(
+      () => runBuild(goldenThemeDir, previewData, path.join(aliasDir, 'dist'), {
+        emptyOutDir: true,
+        projectRoot: tempDir,
+        publicDir: path.join(tempDir, 'public'),
+      }),
+      /Replacement output path must not contain symbolic links:/,
+    );
+    await assert.rejects(fs.access(path.join(realDir, 'dist')), { code: 'ENOENT' });
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }

@@ -30,12 +30,23 @@ export async function run(argv) {
     return;
   }
 
-  const { themeDir, previewDataPath, outDir, publicDir } = parseArgs(argv);
+  const {
+    themeDir,
+    previewDataPath,
+    outDir,
+    publicDir,
+    emptyOutDir,
+  } = parseArgs(argv);
   const previewData = await loadPreviewData(previewDataPath);
   const startedAt = performance.now();
 
   try {
-    const result = await runBuild(themeDir, previewData, outDir, { publicDir });
+    const result = await runBuild(themeDir, previewData, outDir, {
+      publicDir,
+      emptyOutDir,
+      previewDataPath,
+      projectRoot: process.cwd(),
+    });
 
     const elapsedMs = Math.round(performance.now() - startedAt);
     console.log(formatBuildSuccessMessage());
@@ -55,15 +66,16 @@ function printHelp() {
   console.log(`zeropress-build - ZeroPress full-build CLI
 
 Usage:
-  zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>]
+  zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir]
 
 Arguments:
   <themeDir>            Theme directory to render
 
 Options:
   --data <path>         Canonical preview-data v0.7 JSON file
-  --out <dir>           Empty output directory (default: ./dist)
+  --out <dir>           Output directory (default: ./dist)
   --public-dir <dir>    Public passthrough directory (default: ./public)
+  --empty-out-dir       Replace an existing output directory after a successful build
   --help, -h            Show help
   --version, -v         Show version
 
@@ -71,7 +83,8 @@ Notes:
   - full build only
   - selective or patch build is not supported
   - output defaults to ./dist relative to the current working directory
-  - output directory must be empty`);
+  - non-empty output requires --empty-out-dir
+  - replacement output must be strictly inside the current working directory`);
 }
 
 function parseArgs(argv) {
@@ -88,6 +101,11 @@ function parseArgs(argv) {
       }
       flags[arg.slice(2)] = value;
       index += 1;
+      continue;
+    }
+
+    if (arg === '--empty-out-dir') {
+      flags['empty-out-dir'] = true;
       continue;
     }
 
@@ -114,8 +132,15 @@ function parseArgs(argv) {
   const publicDir = flags['public-dir']
     ? path.resolve(process.cwd(), flags['public-dir'])
     : undefined;
+  const emptyOutDir = flags['empty-out-dir'] === true;
 
-  return { themeDir, previewDataPath, outDir, publicDir };
+  return {
+    themeDir,
+    previewDataPath,
+    outDir,
+    publicDir,
+    emptyOutDir,
+  };
 }
 
 async function loadPreviewData(previewDataPath) {
@@ -465,30 +490,72 @@ export async function assertThemeDirectory(themeDir) {
 }
 
 export async function runBuild(themeDir, previewData, outDir, options = {}) {
+  const resolvedThemeDir = path.resolve(process.cwd(), themeDir);
+  const resolvedOutDir = path.resolve(process.cwd(), outDir);
   const publicDir = resolvePublicDir(process.cwd(), options.publicDir);
-  assertPublicPathDoesNotOverlap('Theme directory', themeDir, process.cwd(), publicDir);
-  assertPublicPathDoesNotOverlap('Output directory', outDir, process.cwd(), publicDir);
-  await assertThemeDirectory(themeDir);
-  await assertEmptyOutputDirectory(outDir);
+  const emptyOutDir = options.emptyOutDir === true;
+  const projectRoot = path.resolve(options.projectRoot || process.cwd());
+  const previewDataPath = options.previewDataPath
+    || previewData?.[PREVIEW_DATA_SOURCE]?.path;
+
+  assertPublicPathDoesNotOverlap('Theme directory', resolvedThemeDir, process.cwd(), publicDir);
+  assertPublicPathDoesNotOverlap('Output directory', resolvedOutDir, process.cwd(), publicDir);
+  await assertThemeDirectory(resolvedThemeDir);
+
+  if (emptyOutDir) {
+    await assertReplaceableOutputDirectory({
+      outDir: resolvedOutDir,
+      previewDataPath,
+      projectRoot,
+      publicDir,
+      themeDir: resolvedThemeDir,
+    });
+  }
+
+  const outputState = await inspectOutputDirectory(resolvedOutDir);
+  if (!emptyOutDir && !outputState.empty) {
+    throw new Error(`Output directory must be empty: ${resolvedOutDir}`);
+  }
+
   const hasPublicRobotsTxt = await publicRobotsTxtExists(publicDir);
   const publicFavicon = await discoverPublicFavicon(publicDir);
   const sitemapStylesheetHref = await discoverPublicSitemapStylesheet(publicDir);
   const publicOutputPaths = await listPublicOutputPaths(publicDir);
-  const writer = new GeneratedOutputWriter({ outDir });
-  const result = await buildSiteFromThemeDir({
-    previewData,
-    themeDir,
-    writer,
-    options: {
-      favicon: publicFavicon,
-      sitemapStylesheetHref,
-      generateFeed: options.generateFeed,
-      generateRobotsTxt: !hasPublicRobotsTxt,
-      reservedOutputPaths: publicOutputPaths,
-    },
-  });
-  await copyPublicDirectory(publicDir, outDir, publicOutputPaths);
-  return result;
+  const stagingDir = await createOutputStagingDirectory(resolvedOutDir, outputState.mode);
+
+  try {
+    const writer = new GeneratedOutputWriter({ outDir: stagingDir });
+    const result = await buildSiteFromThemeDir({
+      previewData,
+      themeDir: resolvedThemeDir,
+      writer,
+      options: {
+        favicon: publicFavicon,
+        sitemapStylesheetHref,
+        generateFeed: options.generateFeed,
+        generateRobotsTxt: !hasPublicRobotsTxt,
+        reservedOutputPaths: publicOutputPaths,
+      },
+    });
+    await copyPublicDirectory(publicDir, stagingDir, publicOutputPaths);
+
+    if (emptyOutDir) {
+      await assertReplaceableOutputDirectory({
+        outDir: resolvedOutDir,
+        previewDataPath,
+        projectRoot,
+        publicDir,
+        themeDir: resolvedThemeDir,
+      });
+    }
+
+    await commitOutputDirectory(stagingDir, resolvedOutDir, outputState, {
+      emptyOutDir,
+    });
+    return result;
+  } finally {
+    await fs.rm(stagingDir, { recursive: true, force: true });
+  }
 }
 
 class GeneratedOutputWriter {
@@ -512,21 +579,197 @@ class GeneratedOutputWriter {
 }
 
 export async function assertEmptyOutputDirectory(outDir) {
+  const resolvedOutDir = path.resolve(process.cwd(), outDir);
+  const state = await inspectOutputDirectory(resolvedOutDir);
+  if (!state.empty) {
+    throw new Error(`Output directory must be empty: ${resolvedOutDir}`);
+  }
+}
+
+async function inspectOutputDirectory(outDir) {
   try {
-    const stat = await fs.stat(outDir);
+    const stat = await fs.lstat(outDir);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Output path must not be a symbolic link: ${outDir}`);
+    }
     if (!stat.isDirectory()) {
       throw new Error(`Output path is not a directory: ${outDir}`);
     }
 
     const entries = await fs.readdir(outDir);
-    if (entries.length > 0) {
-      throw new Error(`Output directory must be empty: ${outDir}`);
-    }
+    return {
+      exists: true,
+      device: stat.dev,
+      inode: stat.ino,
+      mode: stat.mode & 0o777,
+      empty: entries.length === 0,
+    };
   } catch (error) {
     if (error && error.code === 'ENOENT') {
-      return;
+      return {
+        exists: false,
+        mode: 0o777 & ~process.umask(),
+        empty: true,
+      };
     }
     throw error;
+  }
+}
+
+async function assertReplaceableOutputDirectory({
+  outDir,
+  previewDataPath,
+  projectRoot,
+  publicDir,
+  themeDir,
+}) {
+  const resolvedProjectRoot = path.resolve(projectRoot);
+  const resolvedOutDir = path.resolve(outDir);
+  const canonicalProjectRoot = await fs.realpath(resolvedProjectRoot);
+  const canonicalOutDir = await resolveCanonicalCandidatePath(resolvedOutDir);
+  const requestedRelativeOutput = path.relative(resolvedProjectRoot, resolvedOutDir);
+  const relativeOutput = path.relative(canonicalProjectRoot, canonicalOutDir);
+
+  if (
+    !requestedRelativeOutput
+    || requestedRelativeOutput === '..'
+    || requestedRelativeOutput.startsWith(`..${path.sep}`)
+    || path.isAbsolute(requestedRelativeOutput)
+    || !relativeOutput
+    || relativeOutput === '..'
+    || relativeOutput.startsWith(`..${path.sep}`)
+    || path.isAbsolute(relativeOutput)
+  ) {
+    throw new Error(
+      `Replacement output directory must be strictly inside the project root: ${resolvedOutDir}`,
+    );
+  }
+
+  if (pathsOverlap(resolvedOutDir, path.resolve(themeDir))) {
+    throw new Error(`Replacement output directory must not overlap the theme directory: ${resolvedOutDir}`);
+  }
+
+  if (pathsOverlap(resolvedOutDir, path.resolve(publicDir))) {
+    throw new Error(`Replacement output directory must not overlap the public directory: ${resolvedOutDir}`);
+  }
+
+  if (previewDataPath) {
+    const resolvedPreviewDataPath = path.resolve(previewDataPath);
+    if (
+      resolvedPreviewDataPath === resolvedOutDir
+      || isPathInside(resolvedOutDir, resolvedPreviewDataPath)
+    ) {
+      throw new Error(
+        `Replacement output directory must not contain the preview-data file: ${resolvedOutDir}`,
+      );
+    }
+  }
+
+  await assertNoSymlinkOutputComponents(resolvedProjectRoot, resolvedOutDir);
+}
+
+async function resolveCanonicalCandidatePath(candidatePath) {
+  let currentPath = path.resolve(candidatePath);
+  const missingSegments = [];
+
+  while (true) {
+    try {
+      const canonicalPath = await fs.realpath(currentPath);
+      return path.join(canonicalPath, ...missingSegments);
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') {
+        throw error;
+      }
+
+      const parentPath = path.dirname(currentPath);
+      if (parentPath === currentPath) {
+        throw error;
+      }
+      missingSegments.unshift(path.basename(currentPath));
+      currentPath = parentPath;
+    }
+  }
+}
+
+async function assertNoSymlinkOutputComponents(projectRoot, outDir) {
+  const relativeOutput = path.relative(projectRoot, outDir);
+  const segments = relativeOutput.split(path.sep).filter(Boolean);
+  let currentPath = projectRoot;
+
+  for (const segment of segments) {
+    currentPath = path.join(currentPath, segment);
+
+    try {
+      const stat = await fs.lstat(currentPath);
+      if (stat.isSymbolicLink()) {
+        throw new Error(`Replacement output path must not contain symbolic links: ${currentPath}`);
+      }
+      if (currentPath !== outDir && !stat.isDirectory()) {
+        throw new Error(`Replacement output parent path is not a directory: ${currentPath}`);
+      }
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        return;
+      }
+      throw error;
+    }
+  }
+}
+
+async function createOutputStagingDirectory(outDir, mode) {
+  const parentDir = path.dirname(outDir);
+  await fs.mkdir(parentDir, { recursive: true });
+  const stagingDir = await fs.mkdtemp(
+    path.join(parentDir, `.${path.basename(outDir)}.zeropress-build-`),
+  );
+  await fs.chmod(stagingDir, mode);
+  return stagingDir;
+}
+
+async function commitOutputDirectory(stagingDir, outDir, initialState, options) {
+  const currentState = await inspectOutputDirectory(outDir);
+
+  if (currentState.exists !== initialState.exists) {
+    throw new Error(`Output directory changed while the site was being built: ${outDir}`);
+  }
+
+  if (
+    initialState.exists
+    && (
+      currentState.device !== initialState.device
+      || currentState.inode !== initialState.inode
+    )
+  ) {
+    throw new Error(`Output directory changed while the site was being built: ${outDir}`);
+  }
+
+  if (!options.emptyOutDir && !currentState.empty) {
+    throw new Error(`Output directory must be empty: ${outDir}`);
+  }
+
+  const backupDir = `${stagingDir}.previous`;
+  if (currentState.exists) {
+    await fs.rename(outDir, backupDir);
+  }
+
+  try {
+    await fs.rename(stagingDir, outDir);
+  } catch (error) {
+    if (currentState.exists) {
+      try {
+        await fs.rename(backupDir, outDir);
+      } catch (restoreError) {
+        throw new AggregateError(
+          [error, restoreError],
+          `Failed to replace output directory and restore the previous output: ${outDir}`,
+        );
+      }
+    }
+    throw error;
+  }
+
+  if (currentState.exists) {
+    await fs.rm(backupDir, { recursive: true, force: true });
   }
 }
 
@@ -670,7 +913,12 @@ function pathsOverlap(firstPath, secondPath) {
 
 function isPathInside(parentPath, childPath) {
   const relativePath = path.relative(parentPath, childPath);
-  return Boolean(relativePath) && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+  return (
+    Boolean(relativePath)
+    && relativePath !== '..'
+    && !relativePath.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relativePath)
+  );
 }
 
 async function ensureWritableParentPath(rootDir, relativePath) {
