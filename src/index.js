@@ -202,8 +202,18 @@ function mapBuildError(error, previewData) {
     return formatPreviewDataValidationError(message, previewData);
   }
 
-  if (message.startsWith('Output path is not a directory:') || message.startsWith('Output directory must be empty:')) {
+  if (message.startsWith('Output path is not a directory:')) {
     return new Error(message);
+  }
+
+  if (message.startsWith('Output directory must be empty:')) {
+    return new Error([
+      message,
+      '',
+      'Hint:',
+      'Pass --empty-out-dir to replace an existing generated output directory after a successful build.',
+      'Use it only for disposable build output; existing contents are removed on success.',
+    ].join('\n'));
   }
 
   if (message.startsWith('Public path is not a directory:')) {

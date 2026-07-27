@@ -761,7 +761,18 @@ test('run rejects a non-empty output directory', async () => {
 
     await assert.rejects(
       () => run([goldenThemeDir, '--data', defaultPreviewDataPath, '--out', outDir]),
-      /Output directory must be empty:/
+      (error) => {
+        assert.match(error.message, /Output directory must be empty:/);
+        assert.match(
+          error.message,
+          /Hint:\nPass --empty-out-dir to replace an existing generated output directory after a successful build\./,
+        );
+        assert.match(
+          error.message,
+          /Use it only for disposable build output; existing contents are removed on success\./,
+        );
+        return true;
+      },
     );
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
