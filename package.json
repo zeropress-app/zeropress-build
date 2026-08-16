@@ -33,7 +33,7 @@
     "test": "node --test"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.22.0"
   },
   "dependencies": {
     "@zeropress/build-core": "0.7.1"
