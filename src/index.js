@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { performance } from 'node:perf_hooks';
 import { buildSiteFromThemeDir } from '@zeropress/build-core';
 import { createColor } from './color.js';
+import { toTerminalSafeText } from './terminal.js';
 
 const require = createRequire(import.meta.url);
 const { version: PACKAGE_VERSION } = require('../package.json');
@@ -49,6 +50,9 @@ export async function run(argv) {
     });
 
     const elapsedMs = Math.round(performance.now() - startedAt);
+    for (const warning of result.warnings) {
+      console.warn(formatBuildWarning(warning));
+    }
     console.log(formatBuildSuccessMessage());
     console.log(`Files: ${result.files.length}`);
     console.log(`Output: ${outDir}`);
@@ -60,6 +64,10 @@ export async function run(argv) {
 
 export function formatBuildSuccessMessage(stream = process.stdout) {
   return createColor(stream).green('Built ZeroPress site successfully');
+}
+
+export function formatBuildWarning(warning, stream = process.stderr) {
+  return createColor(stream).yellow(toTerminalSafeText(`[${warning.code}] ${warning.message}`));
 }
 
 function printHelp() {

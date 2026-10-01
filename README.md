@@ -97,6 +97,11 @@ const result = await runBuild(themeDir, previewData, outDir, {
 
 `runBuild()` accepts an absolute or working-directory-relative theme directory, canonical Preview Data v0.7, an output directory, and optional Build settings. It validates the inputs, writes the complete site, and returns the Build Core result. `emptyOutDir` is disabled by default. When enabled, `projectRoot` defines the replacement safety boundary and `previewDataPath` protects the source file from output overlap.
 
+`result.warnings` contains nonfatal Build Core warnings; the programmatic API
+does not print them. The CLI prints them to stderr. When a theme declares
+`menu_slots.<id>.max_depth`, deeper descendants are excluded from rendering
+with a `MENU_MAX_DEPTH_EXCEEDED` warning. Preview Data is unchanged.
+
 ## Inputs
 
 ### Theme Directory
