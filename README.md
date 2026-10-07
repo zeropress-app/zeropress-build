@@ -15,9 +15,9 @@ It uses directly:
 Public contract references:
 
 - [Preview Data v0.7 Spec](https://zeropress.dev/reference/preview-data/specs/v0.7/)
-- [Preview Data v0.7 Schema](https://schemas.zeropress.dev/preview-data/v0.7/schema.json)
+- [Preview Data v0.7 Schema](https://www.schemastore.org/zeropress-preview-data-0.7.json)
 - [Theme Runtime v0.7 Spec](https://zeropress.dev/reference/theme-runtime/specs/v0.7/)
-- [Theme Runtime v0.7 Schema](https://schemas.zeropress.dev/theme-runtime/v0.7/schema.json)
+- [Theme Runtime v0.7 Schema](https://www.schemastore.org/zeropress-theme-runtime-0.7.json)
 
 ## Install
 
@@ -41,13 +41,13 @@ npx @zeropress/create-theme --name my-minimal --template minimal
 Then build the generated project:
 
 ```bash
-npx @zeropress/build ./my-minimal/theme --data ./my-minimal/preview-data.json --out ./dist
+npx @zeropress/build ./my-minimal/theme --data ./my-minimal/zeropress-preview-data.json --out ./dist
 ```
 
 If you already have a theme and preview-data file:
 
 ```bash
-npx @zeropress/build ./theme --data ./preview-data.json --out ./dist
+npx @zeropress/build ./theme --data ./zeropress-preview-data.json --out ./dist
 ```
 
 For theme authoring and live preview, use [@zeropress/theme](https://www.npmjs.com/package/@zeropress/theme). For Markdown-first sites, use [@zeropress/build-pages](https://www.npmjs.com/package/@zeropress/build-pages) instead of writing preview-data by hand.
@@ -74,9 +74,9 @@ zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--e
 ## Examples
 
 ```bash
-zeropress-build ./my-theme --data ./preview-data.json
-zeropress-build ./my-theme --data ./preview-data.json --out ./dist/site
-zeropress-build ./my-theme --data ./preview-data.json --public-dir ./public
+zeropress-build ./my-theme --data ./zeropress-preview-data.json
+zeropress-build ./my-theme --data ./zeropress-preview-data.json --out ./dist/site
+zeropress-build ./my-theme --data ./zeropress-preview-data.json --public-dir ./public
 ```
 
 ## Programmatic API
@@ -90,7 +90,7 @@ const result = await runBuild(themeDir, previewData, outDir, {
   publicDir,
   emptyOutDir: true,
   projectRoot: process.cwd(),
-  previewDataPath: './preview-data.json',
+  previewDataPath: './zeropress-preview-data.json',
   generateFeed: false,
 });
 ```
