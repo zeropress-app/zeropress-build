@@ -283,15 +283,27 @@ function formatPreviewDataValidationError(message, previewData) {
 }
 
 function parsePreviewDataValidationMessage(message) {
-  const match = /^Invalid preview-data:\s+([A-Z0-9_]+)\s+([^:]+):\s+(.+)$/s.exec(message);
-  if (!match) {
+  // Split the fields separately so whitespace and path matching cannot overlap.
+  const header = /^Invalid preview-data:\s+([A-Z0-9_]+)\s/.exec(message);
+  if (!header) {
+    return null;
+  }
+
+  const pathStart = header[0].length;
+  const separator = message.indexOf(':', pathStart);
+  if (separator <= pathStart) {
+    return null;
+  }
+
+  const reason = message.slice(separator + 1);
+  if (!/^\s./s.test(reason)) {
     return null;
   }
 
   return {
-    code: match[1],
-    path: match[2].trim(),
-    reason: match[3].trim(),
+    code: header[1],
+    path: message.slice(pathStart, separator).trim(),
+    reason: reason.trim(),
   };
 }
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as packageApi from '@zeropress/build';
 import { formatBuildSuccessMessage, run, runBuild } from '../src/index.js';
@@ -200,6 +201,73 @@ test('run reports preview-data validation path locations and hints', async () =>
     assert.match(message, /Category: preview_data_validation/);
     assert.match(message, /Code: INVALID_MENU_ITEM_URL/);
     assert.match(message, /Hint:\nUse an absolute URL/);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run preserves validation details and falls back for malformed error paths', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+  const invalidPreviewPath = path.join(tempDir, 'preview.json');
+  const outDir = path.join(tempDir, 'output');
+
+  try {
+    for (const [key, details] of [
+      ['  extra_field  ', ['Path: extra_field', 'Reason: Unexpected property']],
+      ['extra\nfield', ['Path: extra\nfield', 'Reason: Unexpected property']],
+      ['extra: detail: more\nlines', ['Path: extra', 'Reason: detail: more\nlines: Unexpected property']],
+      ['extra:invalid', null],
+    ]) {
+      const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+      previewData[key] = true;
+      await fs.writeFile(invalidPreviewPath, JSON.stringify(previewData), 'utf8');
+
+      const message = await captureRejectMessage(() => run([
+        goldenThemeDir, '--data', invalidPreviewPath, '--out', outDir,
+      ]));
+      if (details === null) {
+        assert.equal(message, `Invalid preview-data: UNKNOWN_PROPERTY ${key}: Unexpected property`);
+      } else {
+        assert.match(message, /^Preview-data validation failed/);
+        assert.match(message, /Code: UNKNOWN_PROPERTY/);
+        for (const detail of details) {
+          assert.ok(message.includes(detail), detail);
+        }
+      }
+    }
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run rejects long malformed validation paths without excessive backtracking', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-build-cli-'));
+  const invalidPreviewPath = path.join(tempDir, 'preview.json');
+
+  try {
+    const previewData = JSON.parse(await fs.readFile(defaultPreviewDataPath, 'utf8'));
+    previewData[' '.repeat(500_000) + ':invalid'] = true;
+    await fs.writeFile(invalidPreviewPath, JSON.stringify(previewData), 'utf8');
+
+    // A subprocess timeout also stops synchronous regexp regressions.
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      import assert from 'node:assert/strict';
+      import { run } from './src/index.js';
+
+      const expected = 'Invalid preview-data: UNKNOWN_PROPERTY '
+        + ' '.repeat(500_000) + ':invalid: Unexpected property';
+      await assert.rejects(() => run(process.argv.slice(1)), (error) => {
+        assert.equal(error.message === expected, true);
+        return true;
+      });
+    `, goldenThemeDir, '--data', invalidPreviewPath, '--out', path.join(tempDir, 'output')], {
+      cwd: new URL('..', import.meta.url),
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
