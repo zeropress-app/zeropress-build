@@ -37,6 +37,7 @@ export async function run(argv) {
     outDir,
     publicDir,
     emptyOutDir,
+    generateSearchIndex,
   } = parseArgs(argv);
   const previewData = await loadPreviewData(previewDataPath);
   const startedAt = performance.now();
@@ -45,6 +46,7 @@ export async function run(argv) {
     const result = await runBuild(themeDir, previewData, outDir, {
       publicDir,
       emptyOutDir,
+      generateSearchIndex,
       previewDataPath,
       projectRoot: process.cwd(),
     });
@@ -74,7 +76,7 @@ function printHelp() {
   console.log(`zeropress-build - ZeroPress full-build CLI
 
 Usage:
-  zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir]
+  zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir] [--skip-search-index]
 
 Arguments:
   <themeDir>            Theme directory to render
@@ -84,10 +86,13 @@ Options:
   --out <dir>           Output directory (default: ./dist)
   --public-dir <dir>    Public passthrough directory (default: ./public)
   --empty-out-dir       Replace an existing output directory after a successful build
+  --skip-search-index   Skip native indexing; keep search files with a non-searchable placeholder
   --help, -h            Show help
   --version, -v         Show version
 
 Notes:
+  - native search warns at 2 MiB; indexing is skipped at 5 MiB or over 5,000 records
+  - skipped native indexing returns no results; an external index such as Pagefind can replace it
   - full build only
   - selective or patch build is not supported
   - output defaults to ./dist relative to the current working directory
@@ -112,8 +117,8 @@ function parseArgs(argv) {
       continue;
     }
 
-    if (arg === '--empty-out-dir') {
-      flags['empty-out-dir'] = true;
+    if (arg === '--empty-out-dir' || arg === '--skip-search-index') {
+      flags[arg.slice(2)] = true;
       continue;
     }
 
@@ -148,6 +153,7 @@ function parseArgs(argv) {
     outDir,
     publicDir,
     emptyOutDir,
+    generateSearchIndex: flags['skip-search-index'] !== true,
   };
 }
 
@@ -563,6 +569,7 @@ export async function runBuild(themeDir, previewData, outDir, options = {}) {
         favicon: publicFavicon,
         sitemapStylesheetHref,
         generateFeed: options.generateFeed,
+        generateSearchIndex: options.generateSearchIndex,
         generateRobotsTxt: !hasPublicRobotsTxt,
         reservedOutputPaths: publicOutputPaths,
       },
@@ -685,9 +692,12 @@ async function assertReplaceableOutputDirectory({
 
   if (previewDataPath) {
     const resolvedPreviewDataPath = path.resolve(previewDataPath);
+    const canonicalPreviewDataPath = await resolveCanonicalCandidatePath(resolvedPreviewDataPath);
     if (
       resolvedPreviewDataPath === resolvedOutDir
       || isPathInside(resolvedOutDir, resolvedPreviewDataPath)
+      || canonicalPreviewDataPath === canonicalOutDir
+      || isPathInside(canonicalOutDir, canonicalPreviewDataPath)
     ) {
       throw new Error(
         `Replacement output directory must not contain the preview-data file: ${resolvedOutDir}`,

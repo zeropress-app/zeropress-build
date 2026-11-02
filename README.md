@@ -55,7 +55,7 @@ For theme authoring and live preview, use [@zeropress/theme](https://www.npmjs.c
 ## Usage
 
 ```bash
-zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir]
+zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir] [--skip-search-index]
 ```
 
 ### Arguments
@@ -68,6 +68,7 @@ zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--e
 - `--out <dir>`: Output directory, default `./dist`
 - `--public-dir <dir>`: Public passthrough directory, default `./public`
 - `--empty-out-dir`: Build in a sibling staging directory and replace an existing output only after the new build succeeds
+- `--skip-search-index`: Skip native indexing work while retaining the three search files; use when a post-build step supplies external search
 - `--help, -h`: Show help
 - `--version, -v`: Show version
 
@@ -92,6 +93,7 @@ const result = await runBuild(themeDir, previewData, outDir, {
   projectRoot: process.cwd(),
   previewDataPath: './zeropress-preview-data.json',
   generateFeed: false,
+  generateSearchIndex: false, // Optional: let a post-build external index supply search.
 });
 ```
 
@@ -148,6 +150,83 @@ with a `MENU_MAX_DEPTH_EXCEEDED` warning. Preview Data is unchanged.
 - If preview-data sets `site.robots.allow_indexing: false`, the generated fallback `robots.txt` disallows all agents. Custom crawler policies should be provided as public `robots.txt`.
 - Native search artifacts (`/_zeropress/search.json`, `/_zeropress/search.js`, and `/_zeropress/search_pagefind.js`) are emitted only when preview-data does not set `site.search.enabled: false` and the active theme declares `features.search: true`.
 - `site.feed.enabled: false` suppresses `feed.xml`; `site.archive.enabled: false` suppresses chronological archive routes. Disabled outputs do not reserve their public paths.
+
+## Native search indexing
+
+Use `--skip-search-index` (without a value) or pass
+`generateSearchIndex: false` to `runBuild()` to skip native indexing work.
+Omission or `true` uses the automatic limits. The option does not disable the
+search UI or remove files: when search is enabled, `/_zeropress/search.json`,
+`/_zeropress/search.js`, and `/_zeropress/search_pagefind.js` remain available.
+Run your external indexing step after a successful build to supply search
+results. This CLI does not run Pagefind itself.
+
+```bash
+zeropress-build ./theme --data ./zeropress-preview-data.json --out ./dist --skip-search-index
+```
+
+The limits use the uncompressed UTF-8 size of the existing two-space-indented
+JSON, including its final newline (1 MiB = 1,048,576 bytes). Searchable records
+are the published, non-delisted posts, pages, and page front page already
+included by the renderer. The front page is counted once.
+
+The first matching rule applies:
+
+| Condition | `search.json` | Search warning |
+| --- | --- | --- |
+| Site or theme search disabled | No search artifacts | None |
+| No searchable records | `[]` followed by a newline | None, even with indexing explicitly skipped |
+| Indexing explicitly skipped | One non-searchable placeholder | `NATIVE_SEARCH_INDEX_SKIPPED` (`requested`) |
+| More than 5,000 searchable records | One non-searchable placeholder | `NATIVE_SEARCH_INDEX_SKIPPED` (`record_limit`) |
+| JSON size at least 5 MiB | One non-searchable placeholder | `NATIVE_SEARCH_INDEX_SKIPPED` (`size_limit`) |
+| JSON size at least 2 MiB and less than 5 MiB | Complete index | `NATIVE_SEARCH_INDEX_LARGE` |
+| JSON size less than 2 MiB | Complete index | None |
+
+Exactly 5,000 records are allowed if the size limit is not reached. Limits
+cannot be bypassed, and no partial index is emitted. Skipping the index does
+not fail the build or change rendered HTML, effective `site.search.enabled`,
+search widgets, or either JavaScript adapter.
+
+When indexing is skipped for a nonempty site, the entire index is replaced by:
+
+```json
+[
+  {
+    "id": "zeropress:search-omitted",
+    "type": "page",
+    "title": "",
+    "url": "/",
+    "excerpt": "",
+    "headings": [],
+    "categories": [],
+    "tags": [],
+    "published_at_iso": "",
+    "updated_at_iso": "",
+    "content_text": ""
+  }
+]
+```
+
+All searchable fields are empty, so the existing native adapter returns no
+results for every query. This record is a placeholder, not a document: an array
+length of one must not be interpreted as one searchable page. A genuinely
+empty site keeps `[]` instead.
+
+The existing WXR starter Pagefind step uses that distinction: a placeholder
+allows it to index the rendered HTML and replace `search.js` with
+`search_pagefind.js`, while `[]` preserves its guard against crawling unmarked
+pages on a site without searchable content. Pagefind does not index the
+placeholder itself. No search manifest or additional output file is needed.
+
+At most one search warning is returned per build. `NATIVE_SEARCH_INDEX_LARGE`
+includes `byteLength` and `recordCount`; `NATIVE_SEARCH_INDEX_SKIPPED` includes
+`reason` and the actual `recordCount`. A size-limit warning does not report an
+exact final size because measurement stops at the limit. Warnings recommend
+an external search index such as Pagefind and state when native search will
+return no results.
+
+The API returns these warnings silently in `result.warnings`. The CLI prints
+each warning once to stderr and exits successfully when the build succeeds.
 
 ## Supported
 
