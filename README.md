@@ -55,7 +55,7 @@ For theme authoring and live preview, use [@zeropress/theme](https://www.npmjs.c
 ## Usage
 
 ```bash
-zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir] [--skip-search-index]
+zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir] [--skip-search-index] [--max-body-bytes <bytes>]
 ```
 
 ### Arguments
@@ -68,6 +68,7 @@ zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--e
 - `--out <dir>`: Output directory, default `./dist`
 - `--public-dir <dir>`: Public passthrough directory, default `./public`
 - `--empty-out-dir`: Build in a sibling staging directory and replace an existing output only after the new build succeeds
+- `--max-body-bytes <bytes>`: Optional inclusive UTF-8 input-body ceiling; omitted by default
 - `--skip-search-index`: Skip native indexing work while retaining the three search files; use when a post-build step supplies external search
 - `--help, -h`: Show help
 - `--version, -v`: Show version
@@ -150,6 +151,36 @@ with a `MENU_MAX_DEPTH_EXCEEDED` warning. Preview Data is unchanged.
 - If preview-data sets `site.robots.allow_indexing: false`, the generated fallback `robots.txt` disallows all agents. Custom crawler policies should be provided as public `robots.txt`.
 - Native search artifacts (`/_zeropress/search.json`, `/_zeropress/search.js`, and `/_zeropress/search_pagefind.js`) are emitted only when preview-data does not set `site.search.enabled: false` and the active theme declares `features.search: true`.
 - `site.feed.enabled: false` suppresses `feed.xml`; `site.archive.enabled: false` suppresses chronological archive routes. Disabled outputs do not reserve their public paths.
+
+## Post and page body limits
+
+Input `posts/pages.content` warns from **256 KiB (262,144 UTF-8 bytes)**, including
+markup, whitespace and inline data. There is no fixed body ceiling by default;
+existing format, memory, time and hosting constraints still apply.
+
+Use `--max-body-bytes <bytes>` or `maxBodyBytes` in `runBuild()` /
+`runBuildFromSource()` options to enforce an inclusive maximum:
+
+```sh
+zeropress-build ./theme --data ./zeropress-preview-data.json --out ./dist --max-body-bytes 1048576
+```
+
+This accepts exactly 1 MiB; larger input fails with `CONTENT_BODY_TOO_LARGE`.
+The CLI accepts one positive decimal integer below `Number.MAX_SAFE_INTEGER`,
+without units or exponents. API omission, `undefined` or `null` means no ceiling.
+Zero, fractions, non-finite values and string API values are invalid. The option
+is not stored in Preview Data or theme metadata.
+
+The CLI prints aggregate `CONTENT_BODY_LARGE` guidance once per successful build.
+Refusal exits unsuccessfully and preserves previous output with `--empty-out-dir`.
+APIs return warnings or throw the same typed error without logging. Single JSON,
+chunk and object inputs check real content before rendering; neither disabled
+search nor `--skip-search-index` bypasses a finite maximum. Existing path and
+output-replacement protections remain active.
+
+Content is not truncated. Rendered HTML and final pages can grow beyond the
+input size; check final files against your host's limits. This option does not
+enable Base64/data-URL images or change sanitization.
 
 ## Native search indexing
 

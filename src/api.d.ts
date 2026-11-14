@@ -1,5 +1,5 @@
 import type { PreviewDataV07, PreviewDataSource, PreviewDataWorkStore, BuildSiteResult, BuildOptions } from '@zeropress/build-core';
-export interface RunBuildOptions extends Pick<BuildOptions, 'generateFeed' | 'generateSearchIndex'> {
+export interface RunBuildOptions extends Pick<BuildOptions, 'generateFeed' | 'generateSearchIndex' | 'maxBodyBytes'> {
   publicDir?: string;
   emptyOutDir?: boolean;
   projectRoot?: string;

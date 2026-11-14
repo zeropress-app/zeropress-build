@@ -39,6 +39,7 @@ export async function run(argv) {
     publicDir,
     emptyOutDir,
     generateSearchIndex,
+    maxBodyBytes,
   } = parseArgs(argv);
   let source;
   let previewData;
@@ -56,6 +57,7 @@ export async function run(argv) {
       publicDir,
       emptyOutDir,
       generateSearchIndex,
+      maxBodyBytes,
       previewDataPath,
       projectRoot: process.cwd(),
     });
@@ -85,7 +87,7 @@ function printHelp() {
   console.log(`zeropress-build - ZeroPress full-build CLI
 
 Usage:
-  zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir] [--skip-search-index]
+  zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir] [--skip-search-index] [--max-body-bytes <bytes>]
 
 Arguments:
   <themeDir>            Theme directory to render
@@ -96,10 +98,12 @@ Options:
   --public-dir <dir>    Public passthrough directory (default: ./public)
   --empty-out-dir       Replace an existing output directory after a successful build
   --skip-search-index   Skip native indexing; keep search files with a non-searchable placeholder
+  --max-body-bytes <bytes>  Optional inclusive UTF-8 input-body maximum (default: no body-policy ceiling)
   --help, -h            Show help
   --version, -v         Show version
 
 Notes:
+  - bodies of 256 KiB or more warn; format and resource protections always apply
   - native search warns at 2 MiB; indexing is skipped at 5 MiB or over 5,000 records
   - skipped native indexing returns no results; an external index such as Pagefind can replace it
   - full build only
@@ -116,11 +120,12 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
 
-    if (arg === '--data' || arg === '--out' || arg === '--public-dir') {
+    if (arg === '--data' || arg === '--out' || arg === '--public-dir' || arg === '--max-body-bytes') {
       const value = argv[index + 1];
       if (!value || value.startsWith('--')) {
         throw new Error(`Invalid arguments: ${arg} requires a value`);
       }
+      if (arg === '--max-body-bytes' && Object.hasOwn(flags, 'max-body-bytes')) throw new Error('Invalid arguments: duplicate option --max-body-bytes');
       flags[arg.slice(2)] = value;
       index += 1;
       continue;
@@ -146,6 +151,9 @@ function parseArgs(argv) {
     throw new Error('Invalid arguments: --data <path> is required');
   }
 
+  const rawMaximum = flags['max-body-bytes'];
+  if (rawMaximum !== undefined && !/^[0-9]+$/.test(rawMaximum)) throw new Error('Invalid arguments: --max-body-bytes requires positive integer bytes');
+  const maxBodyBytes = normalizeMaxBodyBytes(rawMaximum === undefined ? null : Number(rawMaximum));
   const themeDir = path.resolve(process.cwd(), positional[0]);
   const previewDataPath = path.resolve(process.cwd(), flags.data);
   const outDir = flags.out
@@ -163,6 +171,7 @@ function parseArgs(argv) {
     publicDir,
     emptyOutDir,
     generateSearchIndex: flags['skip-search-index'] !== true,
+    maxBodyBytes,
   };
 }
 
@@ -534,18 +543,29 @@ export async function assertThemeDirectory(themeDir) {
   }
 }
 
+// Validate before opening a source, owned work store or output transaction.
+function normalizeMaxBodyBytes(value) {
+  if (value == null) return null;
+  if (!Number.isSafeInteger(value) || value <= 0 || value >= Number.MAX_SAFE_INTEGER) {
+    throw new TypeError('maxBodyBytes must be a positive safe integer below Number.MAX_SAFE_INTEGER, or null');
+  }
+  return value;
+}
+
 export async function runBuild(themeDir, previewData, outDir, options = {}) {
   return runBuildInternal(themeDir, previewData, outDir, options);
 }
 
 /** The source belongs to the caller. A temporary disk store is owned here unless supplied. */
 export async function runBuildFromSource(themeDir, source, outDir, options = {}) {
+  options = { ...options, maxBodyBytes: normalizeMaxBodyBytes(options.maxBodyBytes) };
   const ownedStore = options.workStore ? null : await createDiskWorkStore();
   try { return await runBuildInternal(themeDir, undefined, outDir, options, source, options.workStore || ownedStore); }
   finally { await ownedStore?.close(); }
 }
 
 async function runBuildInternal(themeDir, previewData, outDir, options, source, workStore) {
+  const maxBodyBytes = normalizeMaxBodyBytes(options.maxBodyBytes);
   const resolvedThemeDir = path.resolve(process.cwd(), themeDir);
   const resolvedOutDir = path.resolve(process.cwd(), outDir);
   const publicDir = resolvePublicDir(process.cwd(), options.publicDir);
@@ -591,6 +611,7 @@ async function runBuildInternal(themeDir, previewData, outDir, options, source, 
       options: {
         favicon: publicFavicon,
         sitemapStylesheetHref,
+        maxBodyBytes,
         generateFeed: options.generateFeed,
         generateSearchIndex: options.generateSearchIndex,
         generateRobotsTxt: !hasPublicRobotsTxt,

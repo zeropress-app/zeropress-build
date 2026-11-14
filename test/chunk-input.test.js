@@ -22,6 +22,21 @@ async function snapshot(dir) {
   for (const file of files) if ((await fs.stat(path.join(dir, file))).isFile()) values[file] = await fs.readFile(path.join(dir, file));
   return values;
 }
+test('body policy failures preserve output for JSON, chunks and the object API', async t => {
+  const { dir, data, file } = await fixture(t);
+  const localTheme = path.join(dir, 'theme'); await fs.cp(theme, localTheme, { recursive: true });
+  data.content.pages[0].content = 'x'.repeat(1048577);
+  await writePreviewDataChunks(createObjectPreviewDataSource(data), file);
+  const json = path.join(dir, 'legacy.json'); await fs.writeFile(json, JSON.stringify(data));
+  const out = path.join(dir, 'dist'); await fs.mkdir(out); await fs.writeFile(path.join(out, 'previous.txt'), 'previous');
+  for (const input of [json, file]) {
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL('../bin/zeropress-build.js', import.meta.url)), localTheme, '--data', input, '--out', 'dist', '--empty-out-dir', '--skip-search-index', '--max-body-bytes', '1048576'], { cwd: dir, encoding: 'utf8' });
+    assert.notEqual(result.status, 0); assert.equal(result.stderr.match(/CONTENT_BODY_TOO_LARGE/g)?.length, 1, result.stderr);
+    assert.equal(await fs.readFile(path.join(out, 'previous.txt'), 'utf8'), 'previous');
+  }
+  await assert.rejects(() => runBuild(localTheme, data, out, { maxBodyBytes: 1048576, projectRoot: dir, emptyOutDir: true, publicDir: path.join(dir, 'public') }), { code: 'CONTENT_BODY_TOO_LARGE' });
+  assert.deepEqual(Object.keys(await snapshot(out)), ['previous.txt']);
+});
 test('source API and CLI preserve object output, warnings, and input files', async t => {
   const { dir, data, file } = await fixture(t), source = await openPreviewDataSource(file);
   const before = await fs.readFile(file);
@@ -58,6 +73,40 @@ test('source protects generation roots and hard links from output/public placeme
     await fs.symlink(source.inputRoots[0], path.join(dir, 'alias'));
     await assert.rejects(() => runBuildFromSource(theme, source, path.join(dir, 'alias/dist'), { publicDir }), /overlap/);
   } finally { await source.close(); }
+});
+
+test('CLI and APIs accept larger bodies by default and report their full byte count', async t => {
+  const { dir, data, file } = await fixture(t);
+  const bytes = 1048577;
+  data.content.pages[0].content = '<p>' + 'x'.repeat(bytes - 7) + '</p>';
+  data.content.pages[0].document_type = 'html';
+  await writePreviewDataChunks(createObjectPreviewDataSource(data), file);
+  const json = path.join(dir, 'data.json'); await fs.writeFile(json, JSON.stringify(data));
+  const options = { publicDir: path.join(dir, 'public'), generateSearchIndex: false, maxBodyBytes: null };
+  const result = await runBuild(theme, data, path.join(dir, 'object'), options);
+  assert.equal(result.warnings.find(w => w.code === 'CONTENT_BODY_LARGE').maxBodyBytes, bytes);
+  const source = await openPreviewDataSource(file);
+  try { assert.deepEqual(await runBuildFromSource(theme, source, path.join(dir, 'source'), options), result); }
+  finally { await source.close(); }
+  for (const [index, input] of [json, file].entries()) {
+    const cli = spawnSync(process.execPath, [fileURLToPath(new URL('../bin/zeropress-build.js', import.meta.url)), theme, '--data', input, '--out', `cli-${index}`, '--skip-search-index'], { cwd: dir, encoding: 'utf8' });
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.equal(cli.stderr.match(/CONTENT_BODY_LARGE/g)?.length, 1, cli.stderr);
+    assert.match(cli.stderr, /1048577 UTF-8 bytes/);
+    assert.deepEqual(await snapshot(path.join(dir, `cli-${index}`)), await snapshot(path.join(dir, 'object')));
+  }
+});
+test('invalid maximum fails before CLI input I/O and API output/store creation', async () => {
+  const { run } = await import('../src/index.js');
+  for (const value of ['0', '-1', '+1', '1.0', '1e3', '4MiB', 'Infinity', '9007199254740991']) {
+    await assert.rejects(() => run(['theme', '--data', 'missing.json', '--max-body-bytes', value]), /max-body-bytes|maxBodyBytes/);
+  }
+  await assert.rejects(() => run(['theme', '--data', 'missing.json', '--max-body-bytes']), /requires a value/);
+  await assert.rejects(() => run(['theme', '--data', 'missing.json', '--max-body-bytes', '1', '--max-body-bytes', '2']), /duplicate/);
+  for (const maxBodyBytes of [0, -1, 1.5, NaN, Infinity, true, '1', Number.MAX_SAFE_INTEGER]) {
+    await assert.rejects(() => runBuild(undefined, undefined, undefined, { maxBodyBytes }), /maxBodyBytes/);
+    await assert.rejects(() => runBuildFromSource(undefined, undefined, undefined, { maxBodyBytes }), /maxBodyBytes/);
+  }
 });
 
 
