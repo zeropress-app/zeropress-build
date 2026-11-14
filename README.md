@@ -234,6 +234,48 @@ each warning once to stderr and exits successfully when the build succeeds.
 - Local theme directory input
 - Local preview-data JSON input
 
+## Chunk input
+
+`--data` also accepts a Preview Data chunk manifest (`zeropress-preview-data-chunks`,
+format version 1). The file extension does not select the format. Legacy JSON loading
+and object-based `runBuild()` remain supported, including their existing diagnostics.
+
+```sh
+zeropress-build ./theme --data .zeropress-wxr/zeropress-preview-data.manifest.json \
+  --out dist --empty-out-dir --skip-search-index
+```
+
+The CLI validates the complete source, spools body payloads to temporary disk storage,
+and builds through core's source API. It verifies chunk size, SHA-256 and record count;
+invalid late chunks or rendering failures leave existing output untouched. The manifest,
+parts and their path/hard-link aliases must not overlap output or public passthrough
+files. The immutable generation is captured once; no implicit generation cleanup runs.
+
+```js
+import { openPreviewDataSource, runBuildFromSource } from '@zeropress/build';
+const source = await openPreviewDataSource('./.zeropress-wxr/zeropress-preview-data.manifest.json');
+try {
+  const result = await runBuildFromSource('./theme', source, './dist', {
+    emptyOutDir: true, projectRoot: process.cwd(), generateSearchIndex: false,
+  });
+  // The API returns result.warnings without logging. Display them in your host UI.
+} finally {
+  await source.close();
+}
+```
+
+`runBuildFromSource` owns and cleans its temporary work store unless `options.workStore`
+is supplied; that store belongs to the caller. `readPreviewDataHeader(path)` is also
+exported for tools needing settings only. It avoids content reads for chunk manifests;
+legacy JSON retains its whole-file cost. Pass the captured `source.header` to follow-up
+steps to keep them tied to the same publication.
+
+Chunks are private build inputs, not files to copy into `dist/`. The transport's
+16 MiB manifest and 32 MiB chunk limits apply before parsing. Metadata catalogs and
+route lists remain proportional to site size. Disk use and additional I/O trade off
+against retained body memory. Native search thresholds and Pagefind integration do
+not change. Existing JSON callers do not gain chunk loading automatically.
+
 ## License
 
 MIT

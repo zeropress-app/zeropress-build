@@ -15,7 +15,7 @@ const defaultPreviewDataPath = path.join(fixturesDir, 'default-preview-data.json
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
 
 test('package root exports the programmatic build API', () => {
-  assert.deepEqual(Object.keys(packageApi), ['runBuild']);
+  assert.deepEqual(Object.keys(packageApi), ['openPreviewDataSource', 'readPreviewDataHeader', 'runBuild', 'runBuildFromSource']);
   assert.equal(packageApi.runBuild, runBuild);
 });
 
@@ -113,7 +113,7 @@ test('run prints help with no args', async () => {
     )),
     true,
   );
-  assert.equal(logs.some((line) => line.includes('Canonical preview-data v0.7 JSON file')), true);
+  assert.equal(logs.some((line) => line.includes('Preview Data v0.7 JSON file or chunk manifest')), true);
   assert.equal(logs.some((line) => line.includes('Public passthrough directory')), true);
   assert.equal(logs.some((line) => line.includes('selective or patch build is not supported')), true);
 });

@@ -1,8 +1,9 @@
+import { isPreviewDataManifest, openPreviewDataSource, createDiskWorkStore } from '@zeropress/build-core/node';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { performance } from 'node:perf_hooks';
-import { buildSiteFromThemeDir } from '@zeropress/build-core';
+import { buildSiteFromThemeDir, buildSiteFromSourceAndThemeDir } from '@zeropress/build-core';
 import { createColor } from './color.js';
 import { toTerminalSafeText } from './terminal.js';
 
@@ -39,11 +40,19 @@ export async function run(argv) {
     emptyOutDir,
     generateSearchIndex,
   } = parseArgs(argv);
-  const previewData = await loadPreviewData(previewDataPath);
+  let source;
+  let previewData;
+  // Keep legacy JSON diagnostics and object API semantics intact.
+  let manifest = false;
+  try { manifest = await isPreviewDataManifest(previewDataPath); }
+  catch { /* The legacy loader supplies the established file diagnostics. */ }
+  if (manifest) source = await openPreviewDataSource(previewDataPath);
+  else previewData = await loadPreviewData(previewDataPath);
   const startedAt = performance.now();
 
   try {
-    const result = await runBuild(themeDir, previewData, outDir, {
+    const build = source ? runBuildFromSource : runBuild;
+    const result = await build(themeDir, source || previewData, outDir, {
       publicDir,
       emptyOutDir,
       generateSearchIndex,
@@ -61,7 +70,7 @@ export async function run(argv) {
     console.log(`Elapsed: ${elapsedMs}ms`);
   } catch (error) {
     throw mapBuildError(error, previewData);
-  }
+  } finally { await source?.close(); }
 }
 
 export function formatBuildSuccessMessage(stream = process.stdout) {
@@ -82,7 +91,7 @@ Arguments:
   <themeDir>            Theme directory to render
 
 Options:
-  --data <path>         Canonical preview-data v0.7 JSON file
+  --data <path>         Preview Data v0.7 JSON file or chunk manifest
   --out <dir>           Output directory (default: ./dist)
   --public-dir <dir>    Public passthrough directory (default: ./public)
   --empty-out-dir       Replace an existing output directory after a successful build
@@ -526,12 +535,24 @@ export async function assertThemeDirectory(themeDir) {
 }
 
 export async function runBuild(themeDir, previewData, outDir, options = {}) {
+  return runBuildInternal(themeDir, previewData, outDir, options);
+}
+
+/** The source belongs to the caller. A temporary disk store is owned here unless supplied. */
+export async function runBuildFromSource(themeDir, source, outDir, options = {}) {
+  const ownedStore = options.workStore ? null : await createDiskWorkStore();
+  try { return await runBuildInternal(themeDir, undefined, outDir, options, source, options.workStore || ownedStore); }
+  finally { await ownedStore?.close(); }
+}
+
+async function runBuildInternal(themeDir, previewData, outDir, options, source, workStore) {
   const resolvedThemeDir = path.resolve(process.cwd(), themeDir);
   const resolvedOutDir = path.resolve(process.cwd(), outDir);
   const publicDir = resolvePublicDir(process.cwd(), options.publicDir);
   const emptyOutDir = options.emptyOutDir === true;
   const projectRoot = path.resolve(options.projectRoot || process.cwd());
   const previewDataPath = options.previewDataPath
+    || source?.inputPath
     || previewData?.[PREVIEW_DATA_SOURCE]?.path;
 
   assertPublicPathDoesNotOverlap('Theme directory', resolvedThemeDir, process.cwd(), publicDir);
@@ -548,6 +569,7 @@ export async function runBuild(themeDir, previewData, outDir, options = {}) {
     });
   }
 
+  if (source) await assertSourcePathsSafe(source, resolvedOutDir, publicDir);
   const outputState = await inspectOutputDirectory(resolvedOutDir);
   if (!emptyOutDir && !outputState.empty) {
     throw new Error(`Output directory must be empty: ${resolvedOutDir}`);
@@ -561,8 +583,9 @@ export async function runBuild(themeDir, previewData, outDir, options = {}) {
 
   try {
     const writer = new GeneratedOutputWriter({ outDir: stagingDir });
-    const result = await buildSiteFromThemeDir({
-      previewData,
+    const build = source ? buildSiteFromSourceAndThemeDir : buildSiteFromThemeDir;
+    const result = await build({
+      ...(source ? { source, workStore } : { previewData }),
       themeDir: resolvedThemeDir,
       writer,
       options: {
@@ -586,6 +609,7 @@ export async function runBuild(themeDir, previewData, outDir, options = {}) {
       });
     }
 
+    if (source) await assertSourcePathsSafe(source, resolvedOutDir, publicDir);
     await commitOutputDirectory(stagingDir, resolvedOutDir, outputState, {
       emptyOutDir,
     });
@@ -593,6 +617,38 @@ export async function runBuild(themeDir, previewData, outDir, options = {}) {
   } finally {
     await fs.rm(stagingDir, { recursive: true, force: true });
   }
+}
+
+async function assertSourcePathsSafe(source, outDir, publicDir) {
+  const canonicalOut = await resolveCanonicalCandidatePath(outDir);
+  const canonicalPublic = await resolveCanonicalCandidatePath(publicDir);
+  const files = source.inputPaths || [];
+  for (const input of [...files, ...(source.inputRoots || [])]) {
+    const canonicalInput = await resolveCanonicalCandidatePath(input);
+    if (pathsOverlap(canonicalInput, canonicalOut) || pathsOverlap(canonicalInput, canonicalPublic)) {
+      throw new Error(`Chunk input must not overlap output or public directories: ${input}`);
+    }
+  }
+  const inputInodes = new Set();
+  for (const input of files) {
+    const stat = await fs.stat(input);
+    inputInodes.add(`${stat.dev}:${stat.ino}`);
+  }
+  async function checkAliases(dir) {
+    let entries;
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); }
+    catch (error) { if (error.code === 'ENOENT') return; throw error; }
+    for (const entry of entries) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) await checkAliases(file);
+      else if (entry.isFile()) {
+        const stat = await fs.stat(file);
+        if (inputInodes.has(`${stat.dev}:${stat.ino}`)) throw new Error(`Chunk input hard-link alias in output or public directory: ${file}`);
+      }
+    }
+  }
+  await checkAliases(outDir);
+  await checkAliases(publicDir);
 }
 
 class GeneratedOutputWriter {
@@ -613,6 +669,18 @@ class GeneratedOutputWriter {
     await fs.rm(fullPath, { recursive: true, force: true });
     await fs.writeFile(fullPath, file.content);
   }
+
+  async writeStream(file) {
+    const relativePath = normalizeOutputPath(file.path);
+    if (!relativePath) throw new Error('Invalid generated output path');
+    const fullPath = path.join(this.outDir, relativePath);
+    await ensureWritableParentPath(this.outDir, relativePath);
+    await fs.rm(fullPath, { recursive: true, force: true });
+    const handle = await fs.open(fullPath, 'w');
+    try { for await (const part of file.content) await handle.writeFile(part); }
+    finally { await handle.close(); }
+  }
+
 }
 
 export async function assertEmptyOutputDirectory(outDir) {

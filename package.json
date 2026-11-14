@@ -4,7 +4,10 @@
   "description": "ZeroPress full-build CLI",
   "type": "module",
   "exports": {
-    ".": "./src/api.js"
+    ".": {
+      "types": "./src/api.d.ts",
+      "default": "./src/api.js"
+    }
   },
   "license": "MIT",
   "bin": {
@@ -36,6 +39,10 @@
     "node": ">=22.22.0"
   },
   "dependencies": {
-    "@zeropress/build-core": "^0.7.10"
+    "@zeropress/build-core": "^0.7.11"
+  },
+  "types": "./src/api.d.ts",
+  "devDependencies": {
+    "@zeropress/preview-data-validator": "^0.7.11"
   }
 }

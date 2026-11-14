@@ -77,15 +77,19 @@ test('default/true options generate the original index and automatic warnings re
     [2, 'NATIVE_SEARCH_INDEX_LARGE', undefined],
     [5, 'NATIVE_SEARCH_INDEX_SKIPPED', 'size_limit'],
   ]) {
-    previewData.content.posts[0].content = '<p>' + 'x'.repeat(size * 1024 * 1024) + '</p>';
+    previewData.content.posts = Array.from({ length: size + 1 }, (_, i) => ({
+      ...previewData.content.posts[0], public_id: 10000 + i, slug: `large-${i}`,
+      content: '<p>' + 'x'.repeat(900 * 1024) + '</p>',
+    }));
     await fs.writeFile(source, JSON.stringify(previewData));
     const api = await silentBuild(themePath, previewData, path.join(root, `api-${size}`), { publicDir: path.join(root, 'public') });
-    assert.equal(api.warnings.length, 1);
-    assert.equal(api.warnings[0].code, code);
-    assert.equal(api.warnings[0].reason, reason);
+    assert.equal(api.warnings.length, 2);
+    const search = api.warnings.find(w => w.code.startsWith('NATIVE_SEARCH_'));
+    assert.equal(search.code, code);
+    assert.equal(search.reason, reason);
     const actual = cli(root, themePath, '--data', source, '--out', `cli-${size}`);
     assert.equal(actual.status, 0, actual.stderr);
-    assert.equal(actual.stderr, `[${code}] ${api.warnings[0].message}\n`);
+    assert.equal(actual.stderr, api.warnings.map(w => `[${w.code}] ${w.message}\n`).join(''));
   }
 });
 
