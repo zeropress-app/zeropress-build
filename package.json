@@ -1,6 +1,6 @@
 {
   "name": "@zeropress/build",
-  "version": "0.7.10",
+  "version": "0.7.11",
   "description": "ZeroPress full-build CLI",
   "type": "module",
   "exports": {
