@@ -55,7 +55,7 @@ For theme authoring and live preview, use [@zeropress/theme](https://www.npmjs.c
 ## Usage
 
 ```bash
-zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir] [--skip-search-index] [--max-body-bytes <bytes>]
+zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir] [--skip-search-index] [--max-body-bytes <bytes>] [--allow-data-uri-images]
 ```
 
 ### Arguments
@@ -68,6 +68,7 @@ zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--e
 - `--out <dir>`: Output directory, default `./dist`
 - `--public-dir <dir>`: Public passthrough directory, default `./public`
 - `--empty-out-dir`: Build in a sibling staging directory and replace an existing output only after the new build succeeds
+- `--allow-data-uri-images`: Opt in to validated PNG/JPEG/GIF/WebP Base64 body images
 - `--max-body-bytes <bytes>`: Optional inclusive UTF-8 input-body ceiling; omitted by default
 - `--skip-search-index`: Skip native indexing work while retaining the three search files; use when a post-build step supplies external search
 - `--help, -h`: Show help
@@ -181,6 +182,49 @@ output-replacement protections remain active.
 Content is not truncated. Rendered HTML and final pages can grow beyond the
 input size; check final files against your host's limits. This option does not
 enable Base64/data-URL images or change sanitization.
+
+## Data URI body images
+
+Use the value-free `--allow-data-uri-images` flag to opt in. The default still
+removes these image URLs, including when building imported WXR content.
+
+```sh
+zeropress-build ./theme --data ./zeropress-preview-data.json --out ./dist --allow-data-uri-images
+```
+
+`runBuild()` and `runBuildFromSource()` use `allowDataUriImages: true`. Single
+JSON, chunk manifests and object inputs use the same renderer policy.
+
+Only `data:image/png;base64,...`, `data:image/jpeg;base64,...`,
+`data:image/gif;base64,...` and `data:image/webp;base64,...` are accepted, with
+case-insensitive MIME names. Base64 must use the standard alphabet and canonical
+padding, without whitespace, percent encoding or additional MIME parameters.
+The decoded header/signature must match the declared type; basic container/end
+markers are checked without decoding the whole image. This is not a complete
+image decoder or a pixel/dimension limit.
+
+The permission applies to body Markdown images and HTML `<img src>` / each
+`<img srcset>` candidate. SVG, other formats, links, iframes, CSS URLs, media
+`<source>` elements, text widgets and structured fields such as `featured_image`
+and site logos keep their existing policies. Unsupported Markdown destinations
+that the Markdown parser leaves as literal text are not rendered images and
+do not produce a removal warning. Code examples and plaintext remain literal.
+
+Images stay inline in the HTML; no asset files are extracted. Input body limits,
+search limits, path protection and output replacement checks still apply.
+Base64 contributes to the body size and to every generated page containing it.
+Check the final HTML against hosting file limits; external image files remain
+preferable for larger or reused images. Authored Markdown/source exports are
+not rewritten by this rendering policy.
+
+With the flag enabled, rejected image URLs produce one aggregate
+`DATA_URI_IMAGES_REMOVED` warning on stderr; the build still succeeds. Reasons
+are `unsupported_format`, `invalid_base64` or `invalid_image`, with counts and
+no image payload. Without the flag, the CLI retains its existing quiet removal
+behavior. API callers can set `reportDataUriImages: true` to report default
+removals (`disabled`) too; results contain warnings without direct logging.
+WordPress/WXR and Studio product defaults are unchanged. Advanced users who
+control their own build command can opt in at this final rendering step.
 
 ## Native search indexing
 

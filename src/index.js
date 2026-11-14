@@ -40,6 +40,7 @@ export async function run(argv) {
     emptyOutDir,
     generateSearchIndex,
     maxBodyBytes,
+    allowDataUriImages,
   } = parseArgs(argv);
   let source;
   let previewData;
@@ -58,6 +59,7 @@ export async function run(argv) {
       emptyOutDir,
       generateSearchIndex,
       maxBodyBytes,
+      allowDataUriImages,
       previewDataPath,
       projectRoot: process.cwd(),
     });
@@ -87,7 +89,7 @@ function printHelp() {
   console.log(`zeropress-build - ZeroPress full-build CLI
 
 Usage:
-  zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir] [--skip-search-index] [--max-body-bytes <bytes>]
+  zeropress-build <themeDir> --data <path> [--out <dir>] [--public-dir <dir>] [--empty-out-dir] [--skip-search-index] [--max-body-bytes <bytes>] [--allow-data-uri-images]
 
 Arguments:
   <themeDir>            Theme directory to render
@@ -99,6 +101,7 @@ Options:
   --empty-out-dir       Replace an existing output directory after a successful build
   --skip-search-index   Skip native indexing; keep search files with a non-searchable placeholder
   --max-body-bytes <bytes>  Optional inclusive UTF-8 input-body maximum (default: no body-policy ceiling)
+  --allow-data-uri-images  Allow validated PNG/JPEG/GIF/WebP Base64 body images (default: off)
   --help, -h            Show help
   --version, -v         Show version
 
@@ -131,7 +134,7 @@ function parseArgs(argv) {
       continue;
     }
 
-    if (arg === '--empty-out-dir' || arg === '--skip-search-index') {
+    if (arg === '--empty-out-dir' || arg === '--skip-search-index' || arg === '--allow-data-uri-images') {
       flags[arg.slice(2)] = true;
       continue;
     }
@@ -171,6 +174,7 @@ function parseArgs(argv) {
     publicDir,
     emptyOutDir,
     generateSearchIndex: flags['skip-search-index'] !== true,
+    allowDataUriImages: flags['allow-data-uri-images'] === true,
     maxBodyBytes,
   };
 }
@@ -566,6 +570,9 @@ export async function runBuildFromSource(themeDir, source, outDir, options = {})
 
 async function runBuildInternal(themeDir, previewData, outDir, options, source, workStore) {
   const maxBodyBytes = normalizeMaxBodyBytes(options.maxBodyBytes);
+  for (const name of ['allowDataUriImages', 'reportDataUriImages']) {
+    if (options[name] !== undefined && typeof options[name] !== 'boolean') throw new TypeError(`${name} must be a boolean`);
+  }
   const resolvedThemeDir = path.resolve(process.cwd(), themeDir);
   const resolvedOutDir = path.resolve(process.cwd(), outDir);
   const publicDir = resolvePublicDir(process.cwd(), options.publicDir);
@@ -614,6 +621,8 @@ async function runBuildInternal(themeDir, previewData, outDir, options, source, 
         maxBodyBytes,
         generateFeed: options.generateFeed,
         generateSearchIndex: options.generateSearchIndex,
+        allowDataUriImages: options.allowDataUriImages,
+        reportDataUriImages: options.reportDataUriImages,
         generateRobotsTxt: !hasPublicRobotsTxt,
         reservedOutputPaths: publicOutputPaths,
       },
